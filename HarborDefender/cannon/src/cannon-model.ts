@@ -432,7 +432,16 @@ function box(w: number, h: number, d: number, x: number, y: number, z: number, r
 function cylinderX(radius: number, length: number, x: number, y: number, z: number, segments: number, inward = false) {
   const geo = new THREE.CylinderGeometry(radius, radius, length, segments, 1, true);
   geo.rotateZ(Math.PI / 2);
-  if (inward) geo.scale(1, -1, 1); // 翻转径向法线，做轮圈内壁
+  if (inward) {
+    // 镜像翻绕序让正面朝向轴心，但 applyMatrix4 的法线是逆转置、不处理负行列式，
+    // 法线仍朝外；不取反就会以背光面着色。
+    geo.scale(1, -1, 1);
+    const normal = geo.getAttribute('normal') as THREE.BufferAttribute;
+    for (let i = 0; i < normal.count; i++) {
+      normal.setXYZ(i, -normal.getX(i), -normal.getY(i), -normal.getZ(i));
+    }
+    normal.needsUpdate = true;
+  }
   geo.translate(x, y, z);
   return geo;
 }
@@ -452,11 +461,11 @@ function buildWheel(cx: number, cz: number, out: THREE.BufferGeometry[]) {
   const rimInner = R - 0.0065;
   const seg = 10;
 
-  // 轮圈：外壁 + 内壁 + 两侧环面（比挤出体省一半面）
-  out.push(mapCell(cylinderX(R, W, cx, A, cz, seg), 'wood'));
-  out.push(mapCell(cylinderX(rimInner, W, cx, A, cz, seg, true), 'wood'));
-  out.push(mapCell(ringFace(rimInner, R, seg, cx - W / 2, A, cz, -Math.PI / 2), 'wood'));
-  out.push(mapCell(ringFace(rimInner, R, seg, cx + W / 2, A, cz, Math.PI / 2), 'wood'));
+  // 轮圈：整体铁质（外壁 + 内壁 + 两侧环面），单层结构避免共面闪烁
+  out.push(mapCell(cylinderX(R, W, cx, A, cz, seg), 'iron'));
+  out.push(mapCell(cylinderX(rimInner, W, cx, A, cz, seg, true), 'iron'));
+  out.push(mapCell(ringFace(rimInner, R, seg, cx - W / 2, A, cz, -Math.PI / 2), 'iron'));
+  out.push(mapCell(ringFace(rimInner, R, seg, cx + W / 2, A, cz, Math.PI / 2), 'iron'));
 
   // 轮辐
   for (let i = 0; i < 6; i++) {
@@ -465,10 +474,9 @@ function buildWheel(cx: number, cz: number, out: THREE.BufferGeometry[]) {
     out.push(mapCell(box(0.013, 0.023, 0.008, cx, A + Math.cos(angle) * r, cz + Math.sin(angle) * r, angle), 'wood'));
   }
 
-  // 轮毂 + 轴帽 + 轮胎箍
+  // 轮毂 + 轴帽（轮圈整体木质，去掉铁皮套壳避免移动时共面闪烁）
   out.push(mapCell(cylinderX(0.0125, 0.033, cx, A, cz, 6), 'wood'));
   out.push(mapCell(cylinderX(0.0133, 0.008, cx + Math.sign(cx) * W * 0.3, A, cz, 6), 'iron'));
-  out.push(mapCell(cylinderX(R + 0.0011, W, cx, A, cz, seg), 'iron'));
 }
 
 // ---------------------------------------------------------------- barrel profile
@@ -593,11 +601,11 @@ export function createCannon(): THREE.Group {
   ];
   for (const [z, r] of bands) addGun(torusZ(r * BARREL_R + 0.0014, 0.0032, z), 'brass');
 
-  // 炮膛（深色内筒）
-  const bore = new THREE.CylinderGeometry(0.0265 * BARREL_R, 0.0265 * BARREL_R, 0.055, 8);
-  bore.rotateX(Math.PI / 2);
-  bore.translate(0, 0, DIM.barrelFront + 0.0275);
-  addGun(bore, 'bore');
+  // 炮口封死：单个深色圆盘嵌在炮口，避免炮膛内筒正反面套叠
+  const boreDisc = new THREE.CircleGeometry(0.0265 * BARREL_R, 16);
+  boreDisc.rotateY(Math.PI);
+  boreDisc.translate(0, 0, DIM.barrelFront + 0.0015);
+  addGun(boreDisc, 'bore');
 
   const muzzle = new THREE.Object3D();
   muzzle.name = 'muzzle';
