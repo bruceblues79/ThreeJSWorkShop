@@ -89,7 +89,8 @@ cannon                     Group
 - 契约不变：yaw = 根 `rotation.y`；pitch = `gun_rotate.rotation.x`（正值抬炮口）；炮口朝 -Z；三个节点名禁止改。
 - 单炮渲染成本：1780 tri / 2 draw call / 1 材质 / 3 张贴图；三座约 5.3k tri / 6 draw call。
   （优化前 v2：12412 tri / 5 draw call / 4 材质。）
-- 材质：单张 1024 图集，分格 wood 512 / bronze 512 / iron 256 / brass 256 / bore 128；
+- 材质：单张 1024 颜色图集，分格 wood 512 / bronze 512 / iron 256 / brass 256 / bore 128；
+  粗糙度/金属度与法线各用 512 图集（分格同步减半）；
   `map` 为 sRGB 颜色，`roughnessMap` 与 `metalnessMap` 共用一张 G=roughness、B=metalness 的贴图，另有 `normalMap`。
   木纹/青铜锈蚀仍由固定种子 20261013 程序化生成，首次 `createCannon()` 时构建并缓存，三座共享，勿原地改参数或 dispose。
 - 低模取舍：炮身 Lathe 14 段 + 11 点轮廓；凸箍 Torus 3×10（不带炮耳端盖）；轮圈 10 段、6 根轮辐；铆钉为六边形贴面片；轮毂箍/轮毂圆顶已删除。
@@ -118,7 +119,7 @@ cannon                     Group
   6 座垛体各 3 行顶面，顶行按 32 mm 块整块削低 0.02–0.095 m、次行轻微错位。
 - 碎石：6 块大块低模碎石（二十面体 20 tri/块，约 0.14–0.22 m 宽）散在墙顶两端，合并进 `wall-stone`；不做沙包。
 - 节点：`wall` → `wall-stone`（墙身 + 垛体 + 碎石合并）；无其他子节点，无 `gun_rotate` / `muzzle` / `hit_core`。
-- 材质：1 个 `MeshStandardMaterial`（`wall-stone`），1024 乱石砌墙（map / RM / normal），
+- 材质：1 个 `MeshStandardMaterial`（`wall-stone`），颜色贴图 1024 乱石砌墙，粗糙度/金属度与法线为 512，
   `roughnessMap` 与 `metalnessMap` 共用 G=roughness、B=metalness 贴图，基色纯白。
   石墙为 6 × 6 抖动 Voronoi 单元（约 14% 单元并给邻居形成大石），缝宽 8 px 即灰缝，贴图无缝平铺，UV 1.6 次/m；
   颜色贴图叠加低频积垢与竖向流痕污渍。
