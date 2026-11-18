@@ -6,6 +6,7 @@ description: Build viewer/preview.html for a registered asset and send it to the
 # Feishu Preview
 
 把 `viewer/` 里已注册的资产打成自包含 HTML，并发到用户本人的飞书会话。
+预览页只包含本次要预览的资产，不保留资产切换按钮。
 
 ## 步骤
 
@@ -17,9 +18,10 @@ description: Build viewer/preview.html for a registered asset and send it to the
    .skills\feishu-preview\scripts\send-preview.ps1 -Asset <id>
    ```
 
-   脚本会依次执行 `npm run viewer:build`、解析当前飞书用户 `open_id`、把 `viewer/preview.html` 发到该用户的自聊。
+   脚本会依次执行 `npm run viewer:build -- <id>`（只打入该资产、隐藏切换按钮）、
+   解析当前飞书用户 `open_id`、把 `viewer/preview.html` 发到该用户的自聊。
 3. 读取命令输出里的 `message_id`，向用户报告发送成功，并附上 `viewer/preview.html` 的 `computer://` 链接；
-   同时说明 URL 参数：`?asset=<id>&view=iso|front|side&yaw=&pitch=&hud=0&plate=0`。
+   同时说明 URL 参数：`?view=iso|front|side&yaw=&pitch=&hud=0&plate=0`（`asset` 已固定为本次目标）。
 
 ## 失败处理
 

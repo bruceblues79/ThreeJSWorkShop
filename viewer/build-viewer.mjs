@@ -5,11 +5,18 @@ import path from 'node:path';
 
 /**
  * 把公用浏览台打成单文件 HTML：viewer/preview.html
- * 用法：npm run viewer:build
+ * 用法：npm run viewer:build -- <assetId>
+ * 带 assetId 时只打入该资产，预览页不出现资产切换按钮。
  */
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const outDir = path.resolve(here, '../node_modules/.cache/viewer-preview');
+const asset = process.argv[2]?.trim() ?? '';
+
+if (asset) {
+  const registry = await readFile(path.join(here, 'assets.ts'), 'utf8');
+  if (!registry.includes(`id: '${asset}'`)) throw new Error(`asset '${asset}' is not registered in viewer/assets.ts`);
+}
 
 await mkdir(outDir, { recursive: true });
 
@@ -18,6 +25,7 @@ await build({
   configFile: false,
   base: './',
   logLevel: 'warn',
+  define: asset ? { 'globalThis.__PREVIEW_ASSET__': JSON.stringify(asset) } : {},
   build: {
     outDir,
     emptyOutDir: true,

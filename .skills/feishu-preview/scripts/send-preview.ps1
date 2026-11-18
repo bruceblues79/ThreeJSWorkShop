@@ -12,7 +12,7 @@ try {
     throw "asset '$Asset' is not registered in viewer/assets.ts"
   }
 
-  npm run viewer:build | Out-Host
+  npm run viewer:build -- $Asset | Out-Host
   if ($LASTEXITCODE -ne 0) { throw 'viewer build failed' }
 
   $raw = (& lark-cli contact +get-user --format json | Out-String)

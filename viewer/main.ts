@@ -9,6 +9,11 @@ import { ASSETS, type AssetEntry } from './assets';
  */
 
 const params = new URLSearchParams(location.search);
+/** 单资产预览：构建时注入，带值时只加载该资产并隐藏切换按钮。 */
+const previewAsset = String(
+  (globalThis as { __PREVIEW_ASSET__?: string }).__PREVIEW_ASSET__ ?? '',
+).trim();
+const assetList = previewAsset ? ASSETS.filter((entry) => entry.id === previewAsset) : ASSETS;
 if (params.get('hud') === '0') {
   document.querySelector('.card')?.remove();
   document.querySelector('.bar')?.remove();
@@ -190,7 +195,7 @@ function describe(entry: AssetEntry) {
   });
 
   const contract = ['gun_rotate', 'muzzle', 'hit_core']
-    .map((name) => (root.getObjectByName(name) ? name : `${name}?`))
+    .filter((name) => root.getObjectByName(name))
     .join(' / ');
 
   if (title) title.textContent = entry.label;
@@ -198,7 +203,8 @@ function describe(entry: AssetEntry) {
     meta.innerHTML =
       `${size.x.toFixed(3)} × ${size.y.toFixed(3)} × ${size.z.toFixed(3)} m · 接地 y=${bounds.min.y.toFixed(4)}<br />` +
       `${Math.round(tris)} tri · ${draws} draw call<br />` +
-      `节点 ${contract}${entry.note ? `<br />${entry.note}` : ''}`;
+      (contract ? `节点 ${contract}<br />` : '') +
+      (entry.note ?? '');
   }
 
   (window as unknown as { __assetInfo?: object }).__assetInfo = {
@@ -250,10 +256,10 @@ function mount(entry: AssetEntry) {
 }
 
 if (assetsBox) {
-  if (ASSETS.length < 2) {
+  if (assetList.length < 2) {
     assetsBox.remove();
   } else {
-    for (const entry of ASSETS) {
+    for (const entry of assetList) {
       const btn = document.createElement('button');
       btn.textContent = entry.label;
       btn.dataset.asset = entry.id;
@@ -263,7 +269,7 @@ if (assetsBox) {
   }
 }
 
-const initial = ASSETS.find((entry) => entry.id === params.get('asset')) ?? ASSETS[0];
+const initial = assetList.find((entry) => entry.id === params.get('asset')) ?? assetList[0];
 mount(initial);
 
 yawInput?.addEventListener('input', () => {
