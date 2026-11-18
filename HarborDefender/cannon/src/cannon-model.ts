@@ -432,7 +432,16 @@ function box(w: number, h: number, d: number, x: number, y: number, z: number, r
 function cylinderX(radius: number, length: number, x: number, y: number, z: number, segments: number, inward = false) {
   const geo = new THREE.CylinderGeometry(radius, radius, length, segments, 1, true);
   geo.rotateZ(Math.PI / 2);
-  if (inward) geo.scale(1, -1, 1); // 翻转径向法线，做轮圈内壁
+  if (inward) {
+    // 镜像翻绕序让正面朝向轴心，但 applyMatrix4 的法线是逆转置、不处理负行列式，
+    // 法线仍朝外；不取反就会以背光面着色。
+    geo.scale(1, -1, 1);
+    const normal = geo.getAttribute('normal') as THREE.BufferAttribute;
+    for (let i = 0; i < normal.count; i++) {
+      normal.setXYZ(i, -normal.getX(i), -normal.getY(i), -normal.getZ(i));
+    }
+    normal.needsUpdate = true;
+  }
   geo.translate(x, y, z);
   return geo;
 }
