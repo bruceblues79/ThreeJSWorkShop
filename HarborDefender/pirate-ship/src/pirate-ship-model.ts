@@ -1071,9 +1071,9 @@ function buildGunMount(parts: THREE.BufferGeometry[]): void {
   // 旋转炮盘
   add(cylY(0.055, 0.06, 0.012, 0, -0.045, 0, 8), 'iron');
 
-  // 两侧炮耳夹板：贴合炮身半径，夹在炮身两侧
+  // 两侧炮耳夹板：后撤搭在炮盘上，前端夹住炮耳轴
   for (const side of [-1, 1]) {
-    add(box(0.009, 0.064, 0.05, side * 0.034, -0.007, 0.0), 'iron');
+    add(box(0.009, 0.07, 0.062, side * 0.034, -0.008, -0.02), 'iron');
   }
 
   // 炮耳轴
