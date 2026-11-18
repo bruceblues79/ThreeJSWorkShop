@@ -1,5 +1,6 @@
 import type * as THREE from 'three';
 import { createCannon } from '../HarborDefender/cannon/src/cannon-model';
+import { createWall } from '../HarborDefender/wall/src/wall-model';
 
 /**
  * 公用浏览台的资产注册表。
@@ -26,5 +27,11 @@ export const ASSETS: AssetEntry[] = [
     yawRange: 45,
     pitchMin: 0,
     pitchMax: 80,
+  },
+  {
+    id: 'wall',
+    label: '城防港城墙 v5',
+    create: createWall,
+    note: '墙顶 y=0.8 · 炮位 x=±0.75/0 · 3.0 m 垛口护墙',
   },
 ];
