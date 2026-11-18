@@ -27,6 +27,7 @@ pnpm-debug.log*
 # editor / OS
 .idea/
 .trae/
+.trae-html-share-packages/
 .DS_Store
 Thumbs.db
 desktop.ini
