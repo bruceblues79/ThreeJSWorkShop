@@ -70,28 +70,28 @@ cannon                     Object3D   根节点 = 原型（无父级，clone 后
 - 公用浏览台：根工程 `viewer/`，所有资产共用，不再为单个资产单独出 HTML。
   资产在 `viewer/assets.ts` 注册，`npm run viewer:build` 生成自包含单文件 `viewer/preview.html`；
   URL 参数 `?asset=cannon&view=iso|front|side&yaw=&pitch=&hud=0&plate=0`。
-- 实测包围盒（pitch 0）：0.239 × 0.203 × 0.350 m；地面 y = 0；炮轴 0.156 m。
-- 炮身整体半径系数 0.76（最大直径约 0.086 m），轮距外沿 ±0.1195，车架宽 0.239 m，仍在基座盘 0.38 内。
-- 炮口挂点 `muzzle`（gun_rotate 局部）：(0, 0, -0.185)；`hit_core` 由包围盒中心自动计算。
+- 实测包围盒（pitch 0）：0.228 × 0.199 × 0.350 m；最低点 y = 0.0018（十边形轮圈弦高）；炮轴 0.156 m。
+- 炮身整体半径系数 0.76（最大直径约 0.086 m），轮距外沿 ±0.114，车架宽 0.228 m，仍在基座盘 0.38 内。
+- 炮口挂点 `muzzle`（gun_rotate 局部）：(0, 0, -0.185)；`hit_core` 由包围盒中心自动计算（约 (0, 0.101, -0.010)）。
 - 炮床只保留前段（z ≈ -0.130…-0.015），把后段让给抬炮时的炮尾摆动；pitch 0–80° 不再与木架穿插。
 - 预览里的圆形基座盘属于浏览台，不在 `createCannon()` 内；`?plate=0` 可隐藏。
 - 轮子不滚动，无动画节点；安装位（x/z/基座高度）与 v1 完全一致。
 
 ```
 cannon                     Group
-├─ cannon-carriage         Mesh  木：车架 + 四轮 + 前段炮床（合并）
-├─ cannon-iron-fittings    Mesh  铁：轮胎、轮毂箍、铆钉、包角、轴帽、轴承铁箍
-├─ gun_rotate              Group 位置 (0, 0.156, 0)，pitch 枢轴
-│  ├─ cannon-barrel        Mesh  青铜炮身（Lathe 回转体）
-│  ├─ cannon-barrel-fittings Mesh 金色凸箍 + 炮耳同心圆端盖
-│  ├─ cannon-bore          Mesh  炮膛内筒（深色）
+├─ cannon-carriage         Mesh   1180 tri，静态：木（车架/轮圈/轮辐/轮毂/轴/炮床）+ 铁（轮胎箍/轴帽/铆钉/包角/轴承箍）
+├─ gun_rotate              Group  位置 (0, 0.156, 0)，pitch 枢轴
+│  ├─ cannon-barrel        Mesh   600 tri，青铜炮身 + 黄铜凸箍 + 深色炮膛（合并为一个 Mesh）
 │  └─ muzzle               Object3D (0, 0, -0.185)
 └─ hit_core                Object3D
 ```
 
 - 契约不变：yaw = 根 `rotation.y`；pitch = `gun_rotate.rotation.x`（正值抬炮口）；炮口朝 -Z；三个节点名禁止改。
-- 渲染成本：12412 tri / 5 draw call / 4 材质；三座约 37k tri / 15 draw call（v1 为 1492 tri / 2 draw call）。
-- 材质：程序化 canvas 贴图，固定种子 20261013——木 `map/roughnessMap/normalMap`，
-  青铜 `map/roughnessMap/metalnessMap/normalMap`（绿锈为低金属度+高粗糙度，磨亮处反之），
-  黄铜为凸箍/端盖纯色金属，铁件近黑。纹理首次 `createCannon()` 时生成并缓存，三座共享，勿原地改参数或 dispose。
-- 兼容提示：新顶 0.203，血条 `barY` 仍为 0.466，留白 0.263（v1 为 0.28）；若要维持旧留白，改 `DEFENDER_BAR_Y = 0.483`。
+- 单炮渲染成本：1780 tri / 2 draw call / 1 材质 / 3 张贴图；三座约 5.3k tri / 6 draw call。
+  （优化前 v2：12412 tri / 5 draw call / 4 材质。）
+- 材质：单张 1024 图集，分格 wood 512 / bronze 512 / iron 256 / brass 256 / bore 128；
+  `map` 为 sRGB 颜色，`roughnessMap` 与 `metalnessMap` 共用一张 G=roughness、B=metalness 的贴图，另有 `normalMap`。
+  木纹/青铜锈蚀仍由固定种子 20261013 程序化生成，首次 `createCannon()` 时构建并缓存，三座共享，勿原地改参数或 dispose。
+- 低模取舍：炮身 Lathe 14 段 + 11 点轮廓；凸箍 Torus 3×10（不带炮耳端盖）；轮圈 10 段、6 根轮辐；铆钉为六边形贴面片；轮毂箍/轮毂圆顶已删除。
+- UV 全部映射进各自图集分格（内缩 2px 防溢色），贴图用 ClampToEdge。
+- 兼容提示：新顶 0.2007，血条 `barY` 仍为 0.466，留白 0.265（v1 为 0.28）；若要维持旧留白，改 `DEFENDER_BAR_Y = 0.481`。

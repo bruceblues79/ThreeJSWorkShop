@@ -2,9 +2,11 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 /**
- * HarborDefender 城防港加农炮 v2。
+ * HarborDefender 城防港加农炮 v2（低模版）。
  * 契约：根节点 rotation.y = yaw；gun_rotate.rotation.x = pitch（正值抬炮口）；
  * muzzle 在世界 -Z 方向；hit_core 可命中。单位：米。
+ *
+ * 性能：整车 ≤2000 tri，2 个 Mesh = 2 draw call；木/铁/青铜/黄铜/膛线共用一张 1024 图集。
  */
 
 const SEED = 20261013;
@@ -85,7 +87,7 @@ function fbm(noise: (x: number, y: number) => number, x: number, y: number, octa
   return value / total;
 }
 
-// ---------------------------------------------------------------- textures
+// ---------------------------------------------------------------- atlas
 
 function makeCanvas(size: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
   const canvas = document.createElement('canvas');
@@ -98,8 +100,8 @@ function makeCanvas(size: number): [HTMLCanvasElement, CanvasRenderingContext2D]
 
 function texture(canvas: HTMLCanvasElement, srgb: boolean): THREE.CanvasTexture {
   const tex = new THREE.CanvasTexture(canvas);
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.RepeatWrapping;
+  tex.wrapS = THREE.ClampToEdgeWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
   tex.anisotropy = 4;
   if (srgb) tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
@@ -130,6 +132,64 @@ function normalFrom(albedo: HTMLCanvasElement, strength: number): HTMLCanvasElem
   return canvas;
 }
 
+const ATLAS = 1024;
+
+/** 图集分格（像素坐标，canvas 左上为原点）。改这里必须同步 uvRect。 */
+const CELL = {
+  wood: { x: 0, y: 0, size: 512 },
+  bronze: { x: 512, y: 0, size: 512 },
+  iron: { x: 0, y: 512, size: 256 },
+  brass: { x: 256, y: 512, size: 256 },
+  bore: { x: 512, y: 512, size: 128 },
+} as const;
+
+type CellName = keyof typeof CELL;
+
+type CellMaps = {
+  color: HTMLCanvasElement;
+  /** G = roughness，B = metalness，共用一张贴图 */
+  rm: HTMLCanvasElement;
+  normal: HTMLCanvasElement;
+};
+
+function solidCell(
+  size: number,
+  color: readonly [number, number, number],
+  rough: readonly [number, number],
+  metal: number,
+  variation: number,
+  seed: number,
+): CellMaps {
+  const [albedo, ctx] = makeCanvas(size);
+  const [rm, rctx] = makeCanvas(size);
+  const noise = makeNoise(seed);
+  const image = ctx.createImageData(size, size);
+  const rimage = rctx.createImageData(size, size);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const n = fbm(noise, x * 0.045, y * 0.045, 3);
+      const i = (y * size + x) * 4;
+      const k = 1 + (n - 0.5) * variation;
+      image.data[i] = THREE.MathUtils.clamp(color[0] * k, 0, 1) * 255;
+      image.data[i + 1] = THREE.MathUtils.clamp(color[1] * k, 0, 1) * 255;
+      image.data[i + 2] = THREE.MathUtils.clamp(color[2] * k, 0, 1) * 255;
+      image.data[i + 3] = 255;
+      const r = THREE.MathUtils.clamp(rough[0] + (rough[1] - rough[0]) * n, 0, 1);
+      rimage.data[i] = 128;
+      rimage.data[i + 1] = r * 255;
+      rimage.data[i + 2] = metal * 255;
+      rimage.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(image, 0, 0);
+  rctx.putImageData(rimage, 0, 0);
+
+  const [normal, nctx] = makeCanvas(size);
+  nctx.fillStyle = 'rgb(128,128,255)';
+  nctx.fillRect(0, 0, size, size);
+  return { color: albedo, rm, normal };
+}
+
 function plankSeam(y: number, plankHeight: number): number {
   const local = ((y % plankHeight) + plankHeight) % plankHeight;
   if (local < 2.5) return 0.42;
@@ -137,10 +197,10 @@ function plankSeam(y: number, plankHeight: number): number {
   return 1;
 }
 
-function buildWoodTextures() {
+function buildWoodCell(): CellMaps {
   const size = 512;
   const [albedo, ctx] = makeCanvas(size);
-  const [rough, rctx] = makeCanvas(size);
+  const [rm, rctx] = makeCanvas(size);
   const grainNoise = makeNoise(SEED + 11);
   const fiberNoise = makeNoise(SEED + 29);
   const crackNoise = makeNoise(SEED + 47);
@@ -165,9 +225,10 @@ function buildWoodTextures() {
       image.data[i + 3] = 255;
 
       const r = THREE.MathUtils.clamp(0.74 + 0.18 * grain - 0.25 * (seam - 1) + 0.05 * crack, 0.4, 0.98);
-      const ri = i;
-      rimage.data[ri] = rimage.data[ri + 1] = rimage.data[ri + 2] = r * 255;
-      rimage.data[ri + 3] = 255;
+      rimage.data[i] = 128;
+      rimage.data[i + 1] = r * 255;
+      rimage.data[i + 2] = 5;
+      rimage.data[i + 3] = 255;
     }
   }
   ctx.putImageData(image, 0, 0);
@@ -188,14 +249,10 @@ function buildWoodTextures() {
   }
   ctx.globalAlpha = 1;
 
-  return {
-    map: texture(albedo, true),
-    roughnessMap: texture(rough, false),
-    normalMap: texture(normalFrom(albedo, 2.4), false),
-  };
+  return { color: albedo, rm, normal: normalFrom(albedo, 2.4) };
 }
 
-function drawBarrelOrnament(ctx: CanvasRenderingContext2D, size: number, color: string, alpha: number) {
+function drawBarrelOrnament(ctx: CanvasRenderingContext2D, size: number, color: string, alpha: number, rough = false) {
   const bands = [0.13, 0.44, 0.74, 0.9];
   ctx.save();
   ctx.globalAlpha = alpha;
@@ -205,6 +262,7 @@ function drawBarrelOrnament(ctx: CanvasRenderingContext2D, size: number, color: 
     const y = (1 - v) * size;
     ctx.fillRect(0, y - 3, size, 2);
     ctx.fillRect(0, y + 3, size, 2);
+    if (rough) continue;
     for (let i = 0; i < 64; i++) ctx.fillRect(i * 8 + 2, y - 9, 3.5, 5);
     for (let i = 0; i < 16; i++) {
       ctx.lineWidth = 1.6;
@@ -219,17 +277,15 @@ function drawBarrelOrnament(ctx: CanvasRenderingContext2D, size: number, color: 
   ctx.restore();
 }
 
-function buildBronzeTextures() {
+function buildBronzeCell(): CellMaps {
   const size = 512;
   const [albedo, ctx] = makeCanvas(size);
-  const [rough, rctx] = makeCanvas(size);
-  const [metal, mctx] = makeCanvas(size);
+  const [rm, rctx] = makeCanvas(size);
   const patinaNoise = makeNoise(SEED + 101);
   const blotchNoise = makeNoise(SEED + 131);
   const pitNoise = makeNoise(SEED + 157);
   const image = ctx.createImageData(size, size);
   const rimage = rctx.createImageData(size, size);
-  const mimage = mctx.createImageData(size, size);
 
   const bronze = [0.40, 0.30, 0.15];
   const patina = [0.16, 0.28, 0.23];
@@ -264,74 +320,97 @@ function buildBronzeTextures() {
       image.data[i + 3] = 255;
 
       const roughness = THREE.MathUtils.clamp(0.34 + 0.44 * mask + 0.06 * pit, 0, 1);
-      rimage.data[i] = rimage.data[i + 1] = rimage.data[i + 2] = roughness * 255;
-      rimage.data[i + 3] = 255;
-
       const metalness = THREE.MathUtils.clamp(0.94 - 0.8 * mask, 0, 1);
-      mimage.data[i] = mimage.data[i + 1] = mimage.data[i + 2] = metalness * 255;
-      mimage.data[i + 3] = 255;
+      rimage.data[i] = 128;
+      rimage.data[i + 1] = roughness * 255;
+      rimage.data[i + 2] = metalness * 255;
+      rimage.data[i + 3] = 255;
     }
   }
   ctx.putImageData(image, 0, 0);
   rctx.putImageData(rimage, 0, 0);
-  mctx.putImageData(mimage, 0, 0);
 
   drawBarrelOrnament(ctx, size, '#2a2110', 0.5);
   drawBarrelOrnament(ctx, size, '#c9a85c', 0.28);
-  drawBarrelOrnament(rctx, size, '#3a3a3a', 0.55);
+  drawBarrelOrnament(rctx, size, '#3a3a3a', 0.55, true);
+
+  return { color: albedo, rm, normal: normalFrom(albedo, 1.6) };
+}
+
+/** 把各分格拼进三张图集：颜色、roughness+metalness（G/B）、法线。 */
+function buildAtlas() {
+  const [colorCanvas, colorCtx] = makeCanvas(ATLAS);
+  const [rmCanvas, rmCtx] = makeCanvas(ATLAS);
+  const [normalCanvas, normalCtx] = makeCanvas(ATLAS);
+
+  const builders: Record<CellName, () => CellMaps> = {
+    wood: buildWoodCell,
+    bronze: buildBronzeCell,
+    iron: () => solidCell(256, [0.15, 0.13, 0.115], [0.46, 0.62], 0.85, 0.3, SEED + 211),
+    brass: () => solidCell(256, [0.61, 0.49, 0.275], [0.34, 0.5], 1, 0.16, SEED + 233),
+    bore: () => solidCell(128, [0.055, 0.05, 0.045], [0.55, 0.65], 0.5, 0.12, SEED + 251),
+  };
+
+  for (const name of Object.keys(CELL) as CellName[]) {
+    const cell = CELL[name];
+    const maps = builders[name]();
+    colorCtx.drawImage(maps.color, cell.x, cell.y);
+    rmCtx.drawImage(maps.rm, cell.x, cell.y);
+    normalCtx.drawImage(maps.normal, cell.x, cell.y);
+  }
 
   return {
-    map: texture(albedo, true),
-    roughnessMap: texture(rough, false),
-    metalnessMap: texture(metal, false),
-    normalMap: texture(normalFrom(albedo, 1.6), false),
+    map: texture(colorCanvas, true),
+    rm: texture(rmCanvas, false),
+    normalMap: texture(normalCanvas, false),
   };
 }
 
 // ---------------------------------------------------------------- materials
 
-let cache: {
-  wood: THREE.MeshStandardMaterial;
-  bronze: THREE.MeshStandardMaterial;
-  brass: THREE.MeshStandardMaterial;
-  iron: THREE.MeshStandardMaterial;
-} | null = null;
+let cache: { atlas: THREE.MeshStandardMaterial } | null = null;
 
 function materials() {
   if (cache) return cache;
-  const wood = buildWoodTextures();
-  const bronze = buildBronzeTextures();
+  const atlas = buildAtlas();
   cache = {
-    wood: new THREE.MeshStandardMaterial({
-      ...wood,
+    atlas: new THREE.MeshStandardMaterial({
+      map: atlas.map,
+      roughnessMap: atlas.rm,
+      metalnessMap: atlas.rm,
+      normalMap: atlas.normalMap,
       color: 0xffffff,
-      metalness: 0.02,
       roughness: 1,
-      flatShading: true,
-    }),
-    bronze: new THREE.MeshStandardMaterial({
-      ...bronze,
-      color: 0xffffff,
       metalness: 1,
-      roughness: 1,
-    }),
-    brass: new THREE.MeshStandardMaterial({
-      color: 0x9c7c44,
-      metalness: 1,
-      roughness: 0.44,
-      flatShading: false,
-    }),
-    iron: new THREE.MeshStandardMaterial({
-      color: 0x24201c,
-      metalness: 0.86,
-      roughness: 0.55,
-      flatShading: true,
     }),
   };
   return cache;
 }
 
 // ---------------------------------------------------------------- geometry helpers
+
+/** 图集分格 UV 矩形（留 2px 内缩，防 mip 溢色）。 */
+function uvRect(name: CellName) {
+  const cell = CELL[name];
+  const pad = 2;
+  return {
+    u0: (cell.x + pad) / ATLAS,
+    u1: (cell.x + cell.size - pad) / ATLAS,
+    v0: 1 - (cell.y + cell.size - pad) / ATLAS,
+    v1: 1 - (cell.y + pad) / ATLAS,
+  };
+}
+
+function mapCell(geo: THREE.BufferGeometry, name: CellName): THREE.BufferGeometry {
+  const uv = geo.getAttribute('uv') as THREE.BufferAttribute | undefined;
+  if (!uv) return geo;
+  const { u0, u1, v0, v1 } = uvRect(name);
+  for (let i = 0; i < uv.count; i++) {
+    uv.setXY(i, u0 + uv.getX(i) * (u1 - u0), v0 + uv.getY(i) * (v1 - v0));
+  }
+  uv.needsUpdate = true;
+  return geo;
+}
 
 function transform(geo: THREE.BufferGeometry, x: number, y: number, z: number, rx = 0, ry = 0, rz = 0) {
   const matrix = new THREE.Matrix4().compose(
@@ -347,64 +426,46 @@ function box(w: number, h: number, d: number, x: number, y: number, z: number, r
   return transform(new THREE.BoxGeometry(w, h, d), x, y, z, rx, ry, rz);
 }
 
-function cylinderX(radius: number, length: number, x: number, y: number, z: number, segments = 20, openEnded = false) {
-  return transform(new THREE.CylinderGeometry(radius, radius, length, segments, 1, openEnded), x, y, z, 0, 0, Math.PI / 2);
+function cylinderX(radius: number, length: number, x: number, y: number, z: number, segments: number, inward = false) {
+  const geo = new THREE.CylinderGeometry(radius, radius, length, segments, 1, true);
+  geo.rotateZ(Math.PI / 2);
+  if (inward) geo.scale(1, -1, 1); // 翻转径向法线，做轮圈内壁
+  geo.translate(x, y, z);
+  return geo;
 }
 
 function ringFace(inner: number, outer: number, segments: number, x: number, y: number, z: number, ry: number) {
   return transform(new THREE.RingGeometry(inner, outer, segments), x, y, z, 0, ry, 0);
 }
 
-function torusX(radius: number, tube: number, x: number, y: number, z: number) {
-  return transform(new THREE.TorusGeometry(radius, tube, 6, 40), x, y, z, 0, Math.PI / 2, 0);
-}
-
-function torusZ(radius: number, tube: number, z: number) {
-  return transform(new THREE.TorusGeometry(radius, tube, 6, 40), 0, 0, z);
-}
-
-function dome(x: number, y: number, z: number, radius: number) {
-  return transform(new THREE.SphereGeometry(radius, 10, 6, 0, Math.PI * 2, 0, Math.PI * 0.55), x, y, z, 0, 0, Math.PI / 2);
+function torusZ(radius: number, tube: number, z: number, radial = 3, tubular = 10) {
+  return transform(new THREE.TorusGeometry(radius, tube, radial, tubular), 0, 0, z);
 }
 
 // ---------------------------------------------------------------- wheel
 
-function buildWheel(cx: number, cz: number): { wood: THREE.BufferGeometry[]; iron: THREE.BufferGeometry[] } {
+function buildWheel(cx: number, cz: number, out: THREE.BufferGeometry[]) {
   const { wheelR: R, wheelW: W, axleY: A } = DIM;
-  const wood: THREE.BufferGeometry[] = [];
-  const iron: THREE.BufferGeometry[] = [];
+  const rimInner = R - 0.0065;
+  const seg = 10;
 
-  const shape = new THREE.Shape();
-  shape.absarc(0, 0, R, 0, Math.PI * 2, false);
-  const hole = new THREE.Path();
-  hole.absarc(0, 0, 0.0295, 0, Math.PI * 2, true);
-  shape.holes.push(hole);
-  const rim = new THREE.ExtrudeGeometry(shape, { depth: W, bevelEnabled: false, curveSegments: 24 });
-  const rimUv = rim.getAttribute('uv') as THREE.BufferAttribute;
-  for (let i = 0; i < rimUv.count; i++) rimUv.setXY(i, rimUv.getX(i) * 16, rimUv.getY(i) * 16);
-  rimUv.needsUpdate = true;
-  rim.translate(0, 0, -W / 2);
-  rim.rotateY(Math.PI / 2);
-  rim.translate(cx, A, cz);
-  wood.push(rim);
+  // 轮圈：外壁 + 内壁 + 两侧环面（比挤出体省一半面）
+  out.push(mapCell(cylinderX(R, W, cx, A, cz, seg), 'wood'));
+  out.push(mapCell(cylinderX(rimInner, W, cx, A, cz, seg, true), 'wood'));
+  out.push(mapCell(ringFace(rimInner, R, seg, cx - W / 2, A, cz, -Math.PI / 2), 'wood'));
+  out.push(mapCell(ringFace(rimInner, R, seg, cx + W / 2, A, cz, Math.PI / 2), 'wood'));
 
-  for (let i = 0; i < 12; i++) {
-    const angle = (i / 12) * Math.PI * 2;
+  // 轮辐
+  for (let i = 0; i < 6; i++) {
+    const angle = (i / 6) * Math.PI * 2;
     const r = 0.0195;
-    wood.push(box(0.013, 0.023, 0.008, cx, A + Math.cos(angle) * r, cz + Math.sin(angle) * r, angle, 0, 0));
+    out.push(mapCell(box(0.013, 0.023, 0.008, cx, A + Math.cos(angle) * r, cz + Math.sin(angle) * r, angle), 'wood'));
   }
 
-  wood.push(cylinderX(0.0125, 0.033, cx, A, cz, 14));
-  iron.push(cylinderX(0.0133, 0.008, cx - W * 0.3, A, cz, 14));
-  iron.push(cylinderX(0.0133, 0.008, cx + W * 0.3, A, cz, 14));
-
-  iron.push(transform(new THREE.CylinderGeometry(R + 0.0011, R + 0.0011, W + 0.002, 28, 1, true), cx, A, cz, 0, 0, Math.PI / 2));
-  iron.push(ringFace(R - 0.0016, R + 0.0011, 28, cx - (W + 0.002) / 2, A, cz, -Math.PI / 2));
-  iron.push(ringFace(R - 0.0016, R + 0.0011, 28, cx + (W + 0.002) / 2, A, cz, Math.PI / 2));
-
-  iron.push(dome(cx + Math.sign(cx) * (W * 0.5 + 0.004), A, cz, 0.0058));
-
-  return { wood, iron };
+  // 轮毂 + 轴帽 + 轮胎箍
+  out.push(mapCell(cylinderX(0.0125, 0.033, cx, A, cz, 6), 'wood'));
+  out.push(mapCell(cylinderX(0.0133, 0.008, cx + Math.sign(cx) * W * 0.3, A, cz, 6), 'iron'));
+  out.push(mapCell(cylinderX(R + 0.0011, W, cx, A, cz, seg), 'iron'));
 }
 
 // ---------------------------------------------------------------- barrel profile
@@ -412,29 +473,15 @@ function buildWheel(cx: number, cz: number): { wood: THREE.BufferGeometry[]; iro
 function barrelProfile(): THREE.Vector2[] {
   const raw: Array<[number, number]> = [
     [0.0455, 0.0],
-    [0.0492, 0.005],
-    [0.0495, 0.011],
-    [0.0472, 0.018],
-    [0.0448, 0.025],
-    [0.0446, 0.035],
-    [0.0462, 0.05],
-    [0.0452, 0.065],
-    [0.0448, 0.095],
-    [0.0455, 0.125],
-    [0.0468, 0.155],
-    [0.0485, 0.185],
-    [0.0505, 0.215],
-    [0.0530, 0.243],
-    [0.0558, 0.262],
+    [0.0495, 0.009],
+    [0.0448, 0.03],
+    [0.0450, 0.09],
+    [0.0470, 0.155],
+    [0.0530, 0.245],
     [0.0562, 0.272],
-    [0.0530, 0.281],
     [0.0430, 0.288],
-    [0.0300, 0.293],
-    [0.0230, 0.297],
-    [0.0255, 0.302],
-    [0.0270, 0.307],
-    [0.0240, 0.313],
-    [0.0130, 0.318],
+    [0.0240, 0.300],
+    [0.0280, 0.309],
     [0.0000, 0.320],
   ];
   const scale = DIM.barrelLength / raw[raw.length - 1][1];
@@ -455,12 +502,12 @@ export function createCannon(): THREE.Group {
   const root = new THREE.Group();
   root.name = 'cannon';
 
-  const wood: THREE.BufferGeometry[] = [];
-  const iron: THREE.BufferGeometry[] = [];
-  const bronze: THREE.BufferGeometry[] = [];
-  const brass: THREE.BufferGeometry[] = [];
+  const staticGeo: THREE.BufferGeometry[] = [];
+  const gunGeo: THREE.BufferGeometry[] = [];
+  const addStatic = (geo: THREE.BufferGeometry, cell: CellName) => staticGeo.push(mapCell(geo, cell));
+  const addGun = (geo: THREE.BufferGeometry, cell: CellName) => gunGeo.push(mapCell(geo, cell));
 
-  const { wheelR: R, trackX: TX, wheelZ: WZ, axleY: A, cheekX: CX, cheekT: CT, pivotY } = DIM;
+  const { trackX: TX, wheelZ: WZ, axleY: A, cheekX: CX, cheekT: CT, pivotY } = DIM;
 
   // 侧颊：前低 / 中高（炮耳座）/ 后低，形成参考图的阶梯轮廓
   const cheekSections: Array<[number, number, number]> = [
@@ -470,45 +517,51 @@ export function createCannon(): THREE.Group {
   ];
   for (const side of [-1, 1]) {
     for (const [z0, z1, top] of cheekSections) {
-      wood.push(box(CT, top - 0.05, z1 - z0, side * CX, (top + 0.05) / 2, (z0 + z1) / 2));
-      iron.push(box(0.0025, 0.006, z1 - z0, side * (CX + CT / 2), top - 0.004, (z0 + z1) / 2));
+      addStatic(box(CT, top - 0.05, z1 - z0, side * CX, (top + 0.05) / 2, (z0 + z1) / 2), 'wood');
     }
-    // 炮耳轴承木块 + 铁箍
-    wood.push(box(0.032, 0.058, 0.066, side * 0.084, 0.133, 0));
-    iron.push(box(0.036, 0.008, 0.07, side * 0.084, 0.160, 0));
-    iron.push(box(0.036, 0.008, 0.07, side * 0.084, 0.106, 0));
+    // 炮耳轴承木块 + 上下铁箍
+    addStatic(box(0.032, 0.058, 0.066, side * 0.084, 0.133, 0), 'wood');
+    addStatic(box(0.036, 0.008, 0.07, side * 0.084, 0.160, 0), 'iron');
+    addStatic(box(0.036, 0.008, 0.07, side * 0.084, 0.106, 0), 'iron');
     // 角铁包角
-    iron.push(box(0.003, 0.052, 0.012, side * (CX + CT / 2 + 0.001), 0.08, 0.135));
-    iron.push(box(0.003, 0.012, 0.052, side * (CX + CT / 2 + 0.001), 0.058, 0.113));
-    iron.push(box(0.003, 0.052, 0.012, side * (CX + CT / 2 + 0.001), 0.08, -0.149));
-    iron.push(box(0.003, 0.012, 0.052, side * (CX + CT / 2 + 0.001), 0.058, -0.127));
-    // 铆钉
-    for (const z of [-0.13, -0.08, 0.06, 0.11]) {
-      for (const y of [0.068, 0.095]) {
-        iron.push(transform(new THREE.SphereGeometry(0.0044, 8, 6), side * (CX + CT / 2 + 0.001), y, z));
+    addStatic(box(0.003, 0.052, 0.012, side * (CX + CT / 2 + 0.001), 0.08, 0.135), 'iron');
+    addStatic(box(0.003, 0.052, 0.012, side * (CX + CT / 2 + 0.001), 0.08, -0.149), 'iron');
+    // 铆钉（六边形薄片，贴面）
+    for (const z of [-0.13, 0.0, 0.11]) {
+      for (const y of [0.072, 0.098]) {
+        addStatic(
+          transform(
+            new THREE.CircleGeometry(0.0044, 6),
+            side * (CX + CT / 2 + 0.0012),
+            y,
+            z,
+            0,
+            side * Math.PI / 2,
+            0,
+          ),
+          'iron',
+        );
       }
     }
   }
 
   // 前后横梁 + 前段炮床（后段留给抬炮时的炮尾摆动空间，避免穿插）
-  wood.push(box(0.156, 0.052, 0.046, 0, A, WZ));
-  wood.push(box(0.156, 0.052, 0.046, 0, A, -WZ));
-  wood.push(box(0.096, 0.03, 0.115, 0, 0.066, -0.073));
-  wood.push(box(0.07, 0.03, 0.03, 0, 0.05, -0.166));
-  wood.push(box(0.07, 0.028, 0.03, 0, 0.048, 0.15));
+  addStatic(box(0.156, 0.052, 0.046, 0, A, WZ), 'wood');
+  addStatic(box(0.156, 0.052, 0.046, 0, A, -WZ), 'wood');
+  addStatic(box(0.096, 0.03, 0.115, 0, 0.066, -0.073), 'wood');
+  addStatic(box(0.07, 0.03, 0.03, 0, 0.05, -0.166), 'wood');
+  addStatic(box(0.07, 0.028, 0.03, 0, 0.048, 0.15), 'wood');
   // 轴
-  wood.push(cylinderX(0.012, 0.206, 0, A, WZ, 12));
-  wood.push(cylinderX(0.012, 0.206, 0, A, -WZ, 12));
-  iron.push(cylinderX(0.0078, 0.012, 0.108, A, WZ, 10));
-  iron.push(cylinderX(0.0078, 0.012, -0.108, A, WZ, 10));
-  iron.push(cylinderX(0.0078, 0.012, 0.108, A, -WZ, 10));
-  iron.push(cylinderX(0.0078, 0.012, -0.108, A, -WZ, 10));
+  addStatic(cylinderX(0.012, 0.206, 0, A, WZ, 6), 'wood');
+  addStatic(cylinderX(0.012, 0.206, 0, A, -WZ, 6), 'wood');
+  addStatic(cylinderX(0.0078, 0.012, 0.108, A, WZ, 6), 'iron');
+  addStatic(cylinderX(0.0078, 0.012, -0.108, A, WZ, 6), 'iron');
+  addStatic(cylinderX(0.0078, 0.012, 0.108, A, -WZ, 6), 'iron');
+  addStatic(cylinderX(0.0078, 0.012, -0.108, A, -WZ, 6), 'iron');
 
   for (const sx of [-1, 1]) {
     for (const sz of [-1, 1]) {
-      const wheel = buildWheel(sx * TX, sz * WZ);
-      wood.push(...wheel.wood);
-      iron.push(...wheel.iron);
+      buildWheel(sx * TX, sz * WZ, staticGeo);
     }
   }
 
@@ -517,25 +570,16 @@ export function createCannon(): THREE.Group {
   gun.name = 'gun_rotate';
   gun.position.set(0, pivotY, 0);
 
-  const profile = barrelProfile();
-  const lathe = new THREE.LatheGeometry(profile, 48);
+  const lathe = new THREE.LatheGeometry(barrelProfile(), 14);
   lathe.rotateX(Math.PI / 2);
   lathe.translate(0, 0, DIM.barrelFront);
-  bronze.push(lathe);
-
-  // 炮膛（深色内筒，前端面即膛底）
-  const bore = new THREE.CylinderGeometry(0.0265 * BARREL_R, 0.0265 * BARREL_R, 0.055, 32);
-  bore.rotateX(Math.PI / 2);
-  bore.translate(0, 0, DIM.barrelFront + 0.0275);
-  const boreMesh = new THREE.Mesh(mergeAll([bore]), mats.iron);
-  boreMesh.name = 'cannon-bore';
-  gun.add(boreMesh);
+  addGun(lathe, 'bronze');
 
   // 炮口端面
-  bronze.push(ringFace(0.0265 * BARREL_R, 0.0455 * BARREL_R, 40, 0, 0, DIM.barrelFront + 0.0004, Math.PI));
+  addGun(ringFace(0.0265 * BARREL_R, 0.0455 * BARREL_R, 16, 0, 0, DIM.barrelFront + 0.0004, Math.PI), 'bronze');
 
   // 炮耳
-  bronze.push(cylinderX(0.0115 * BARREL_R, 0.19, 0, 0, DIM.trunnionZ, 16));
+  addGun(cylinderX(0.0115 * BARREL_R, 0.19, 0, 0, DIM.trunnionZ, 8), 'bronze');
 
   // 金色凸箍（参考图的高光边）
   const bands: Array<[number, number]> = [
@@ -544,39 +588,29 @@ export function createCannon(): THREE.Group {
     [-0.042, 0.0468],
     [0.057, 0.0558],
   ];
-  for (const [z, r] of bands) brass.push(torusZ(r * BARREL_R + 0.0014, 0.0032, z));
+  for (const [z, r] of bands) addGun(torusZ(r * BARREL_R + 0.0014, 0.0032, z), 'brass');
 
-  // 炮耳端盖（同心圆青铜盘）
-  for (const side of [-1, 1]) {
-    brass.push(cylinderX(0.023, 0.009, side * 0.097, 0, DIM.trunnionZ, 24));
-    brass.push(torusX(0.0150, 0.0024, side * 0.1015, 0, DIM.trunnionZ));
-    brass.push(torusX(0.0077, 0.0020, side * 0.1015, 0, DIM.trunnionZ));
-  }
-
-  const barrel = new THREE.Mesh(mergeAll(bronze), mats.bronze);
-  barrel.name = 'cannon-barrel';
-  gun.add(barrel);
-
-  const barrelBrass = new THREE.Mesh(mergeAll(brass), mats.brass);
-  barrelBrass.name = 'cannon-barrel-fittings';
-  gun.add(barrelBrass);
+  // 炮膛（深色内筒）
+  const bore = new THREE.CylinderGeometry(0.0265 * BARREL_R, 0.0265 * BARREL_R, 0.055, 8);
+  bore.rotateX(Math.PI / 2);
+  bore.translate(0, 0, DIM.barrelFront + 0.0275);
+  addGun(bore, 'bore');
 
   const muzzle = new THREE.Object3D();
   muzzle.name = 'muzzle';
   muzzle.position.set(0, 0, DIM.barrelFront);
   gun.add(muzzle);
 
-  const carriageWood = new THREE.Mesh(mergeAll(wood), mats.wood);
-  carriageWood.name = 'cannon-carriage';
-  root.add(carriageWood);
+  const gunMesh = new THREE.Mesh(mergeAll(gunGeo), mats.atlas);
+  gunMesh.name = 'cannon-barrel';
+  gun.add(gunMesh);
 
-  const carriageIron = new THREE.Mesh(mergeAll(iron), mats.iron);
-  carriageIron.name = 'cannon-iron-fittings';
-  root.add(carriageIron);
-
+  const carriageMesh = new THREE.Mesh(mergeAll(staticGeo), mats.atlas);
+  carriageMesh.name = 'cannon-carriage';
+  root.add(carriageMesh);
   root.add(gun);
 
-  for (const mesh of [carriageWood, carriageIron, barrel, barrelBrass, boreMesh]) {
+  for (const mesh of [carriageMesh, gunMesh]) {
     mesh.castShadow = true;
     mesh.receiveShadow = true;
   }
