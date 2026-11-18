@@ -64,7 +64,7 @@ cannon                     Object3D   根节点 = 原型（无父级，clone 后
 - **交付形式**：不导出 GLB、不进 `src/assets.ts` 清单；在 `startBattle` 的加载流程里用 `requestAnimationFrame` 之后构建一次 `createCannon()` 原型，三座与后续重建都从该原型克隆。
 - **风格锁定**：中世纪港口炮——木质双颊车架 + 四个实心木轮 + 前后横梁 + 楔形垫块，铁质车削炮身（炮口环、两道箍环、加厚炮尾、尾部球钮），硬边不圆滑。
 
-### v2 资产（本仓库重建版，参考 `IMG_cannon.jpeg`）
+### v2 资产（本仓库重建版，参考 `cannon/IMG_cannon.jpeg`）
 
 - 代码：`HarborDefender/cannon/src/cannon-model.ts`，`createCannon()` 返回 `THREE.Group`。
 - 公用浏览台：根工程 `viewer/`，所有资产共用，不再为单个资产单独出 HTML。
