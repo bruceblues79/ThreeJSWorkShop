@@ -10,7 +10,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 const SEED = 20261013;
 
 /** 炮身半径整体系数：参考图里炮管更修长，避免短粗感。 */
-const BARREL_R = 0.85;
+const BARREL_R = 0.76;
 
 const DIM = {
   wheelR: 0.036,

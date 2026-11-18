@@ -70,8 +70,8 @@ cannon                     Object3D   根节点 = 原型（无父级，clone 后
 - 公用浏览台：根工程 `viewer/`，所有资产共用，不再为单个资产单独出 HTML。
   资产在 `viewer/assets.ts` 注册，`npm run viewer:build` 生成自包含单文件 `viewer/preview.html`；
   URL 参数 `?asset=cannon&view=iso|front|side&yaw=&pitch=&hud=0&plate=0`。
-- 实测包围盒（pitch 0）：0.239 × 0.208 × 0.350 m；地面 y = 0；炮轴 0.156 m。
-- 炮身整体半径系数 0.85（最大直径约 0.096 m），轮距外沿 ±0.1195，车架宽 0.239 m，仍在基座盘 0.38 内。
+- 实测包围盒（pitch 0）：0.239 × 0.203 × 0.350 m；地面 y = 0；炮轴 0.156 m。
+- 炮身整体半径系数 0.76（最大直径约 0.086 m），轮距外沿 ±0.1195，车架宽 0.239 m，仍在基座盘 0.38 内。
 - 炮口挂点 `muzzle`（gun_rotate 局部）：(0, 0, -0.185)；`hit_core` 由包围盒中心自动计算。
 - 炮床只保留前段（z ≈ -0.130…-0.015），把后段让给抬炮时的炮尾摆动；pitch 0–80° 不再与木架穿插。
 - 预览里的圆形基座盘属于浏览台，不在 `createCannon()` 内；`?plate=0` 可隐藏。
@@ -94,4 +94,4 @@ cannon                     Group
 - 材质：程序化 canvas 贴图，固定种子 20261013——木 `map/roughnessMap/normalMap`，
   青铜 `map/roughnessMap/metalnessMap/normalMap`（绿锈为低金属度+高粗糙度，磨亮处反之），
   黄铜为凸箍/端盖纯色金属，铁件近黑。纹理首次 `createCannon()` 时生成并缓存，三座共享，勿原地改参数或 dispose。
-- 兼容提示：新顶 0.208，血条 `barY` 仍为 0.466，留白 0.258（v1 为 0.28）；若要维持旧留白，改 `DEFENDER_BAR_Y = 0.488`。
+- 兼容提示：新顶 0.203，血条 `barY` 仍为 0.466，留白 0.263（v1 为 0.28）；若要维持旧留白，改 `DEFENDER_BAR_Y = 0.483`。
