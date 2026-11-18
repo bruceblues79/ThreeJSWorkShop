@@ -14,7 +14,7 @@ description: Build viewer/preview.html for a registered asset and send it to the
 2. 运行：
 
    ```powershell
-   .trae\skills\feishu-preview\scripts\send-preview.ps1 -Asset <id>
+   .skills\feishu-preview\scripts\send-preview.ps1 -Asset <id>
    ```
 
    脚本会依次执行 `npm run viewer:build`、解析当前飞书用户 `open_id`、把 `viewer/preview.html` 发到该用户的自聊。

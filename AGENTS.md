@@ -12,6 +12,12 @@
 - `HarborDefender/`、`TheFarField/`：按目标项目划分的资产子目录，各自带 AGENTS.md，单位统一为米。
 - 常用命令：`npm run dev` 起预览、`npm run build` 类型检查并打包、`npm run preview` 预览产物。
 
+# 本地技能
+
+- `.skills/` 存放随仓库版本管理的技能；`.trae/` 整目录忽略，不放技能。
+- 「preview <资产>」：读取 `.skills/feishu-preview/SKILL.md` 并按其步骤执行
+  （构建 `viewer/preview.html` 并发到用户本人飞书）。
+
 # img2threejs
 
 - 技能位于 `C:\Users\bruce\src\img2threejs`（v2.0.1，手动克隆；官方 CLI 不支持 Windows）。
