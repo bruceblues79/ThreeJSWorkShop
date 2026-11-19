@@ -4,6 +4,7 @@ import { createWall } from '../HarborDefender/wall/src/wall-model';
 import { createPirateShip } from '../HarborDefender/pirate-ship/src/pirate-ship-model';
 import { createOrnithopter } from '../HarborDefender/ornithopter/src/ornithopter-model';
 import { createBombardier } from '../HarborDefender/bombardier/src/bombardier-model';
+import { createBossIslewrath } from '../HarborDefender/boss_islewrath/src/boss-islewrath-model';
 
 /**
  * 公用浏览台的资产注册表。
@@ -84,5 +85,16 @@ export const ASSETS: AssetEntry[] = [
       if (rotor) rotor.rotation.y = time * 8;
     },
     note: '船头 -Z · 四叶主旋翼 8 rad/s（真实）· 投弹口 (0,-0.1785,-0.102)<br />顶部 y=0.359（保持 barY 0.479）',
+  },
+  {
+    id: 'boss-islewrath',
+    label: '怒岛号 boss v4',
+    create: createBossIslewrath,
+    yawRange: 45,
+    pitchMin: -5,
+    pitchMax: 60,
+    pitch: 0,
+    pitchNode: 'gun_rotate_1',
+    note: '船头 -Z · 后二炮台基座 0.94 / 前二 0.66 · 副炮 0.75 倍 / 主炮 0.675 倍',
   },
 ];
