@@ -831,16 +831,16 @@ export function createBossIslewrath(): THREE.Group {
     18,
   );
   laserBarrel.rotateX(Math.PI / 2);
-  laserBarrel.translate(0, 0, DIM.laserMuzzleZ);
+  // 炮管口退让 1 cm，让红芯探出（muzzle 节点位置不变）
+  laserBarrel.translate(0, 0, DIM.laserMuzzleZ + 0.01);
   laserGeo.push(mapCell(laserBarrel, 'iron'));
-  laserGeo.push(mapCell(torus(0.128, 0.028, 0, 0, DIM.laserMuzzleZ + 0.01, 0, 0, 0, 3, 18), 'rust'));
-  laserGeo.push(mapCell(torus(0.168, 0.018, 0, 0, DIM.laserMuzzleZ + 0.22, 0, 0, 0, 3, 18), 'rust'));
-  laserGeo.push(mapCell(torus(0.188, 0.018, 0, 0, DIM.laserMuzzleZ + 0.44, 0, 0, 0, 3, 18), 'rust'));
+  laserGeo.push(mapCell(torus(0.168, 0.018, 0, 0, DIM.laserMuzzleZ + 0.23, 0, 0, 0, 3, 18), 'rust'));
+  laserGeo.push(mapCell(torus(0.188, 0.018, 0, 0, DIM.laserMuzzleZ + 0.45, 0, 0, 0, 3, 18), 'rust'));
   laserGeo.push(mapCell(transform(new THREE.CircleGeometry(0.21, 18), 0, 0, -0.2), 'bore'));
   // 炮口端面（填住红芯外圈，避免看穿炮管）
   const mouthFace = new THREE.RingGeometry(0.086, 0.116, 18);
   mouthFace.rotateY(Math.PI);
-  laserGeo.push(mapCell(transform(mouthFace, 0, 0, DIM.laserMuzzleZ + 0.001), 'bore'));
+  laserGeo.push(mapCell(transform(mouthFace, 0, 0, DIM.laserMuzzleZ + 0.011), 'bore'));
 
   // 侧前装甲上的骷髅徽记
   const skull = new THREE.PlaneGeometry(0.22, 0.22);
@@ -852,12 +852,12 @@ export function createBossIslewrath(): THREE.Group {
   laserMesh.receiveShadow = true;
   laserRotate.add(laserMesh);
 
-  // 炮口红芯（短柱体，带厚度，避免共面闪烁）与炮身赤道辉光环
+  // 炮口红芯（Ø0.104 × 90 mm，前脸探出 1 cm）与炮口红环（替代原锈环，避免双环近共面闪烁）
   const glowGeo: THREE.BufferGeometry[] = [];
-  const lens = new THREE.CylinderGeometry(0.086, 0.086, 0.05, 18);
+  const lens = new THREE.CylinderGeometry(0.104, 0.104, 0.09, 18);
   lens.rotateX(Math.PI / 2);
-  glowGeo.push(transform(lens, 0, 0, DIM.laserMuzzleZ + 0.02));
-  glowGeo.push(torus(0.13, 0.02, 0, 0, DIM.laserMuzzleZ + 0.005, 0, 0, 0, 3, 18));
+  glowGeo.push(transform(lens, 0, 0, DIM.laserMuzzleZ + 0.045));
+  glowGeo.push(torus(0.126, 0.024, 0, 0, DIM.laserMuzzleZ + 0.015, 0, 0, 0, 3, 18));
   glowGeo.push(torus(0.294, 0.014, 0, 0, 0.11 + packShift, 0, 0, 0, 3, 20));
   const glowMesh = new THREE.Mesh(mergeAll(glowGeo), mats.glow);
   glowMesh.name = 'laser-core';

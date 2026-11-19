@@ -88,7 +88,7 @@ export const ASSETS: AssetEntry[] = [
   },
   {
     id: 'boss-islewrath',
-    label: '怒岛号 boss v6',
+    label: '怒岛号 boss v8',
     create: createBossIslewrath,
     yawRange: 45,
     pitchMin: -5,
