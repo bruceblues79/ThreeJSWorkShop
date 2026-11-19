@@ -24,7 +24,7 @@ const DIM = {
   muzzleZ: -0.102,
   rotorY: 0.296,
   rotorZ: 0.04,
-  rotorRadius: 0.35,
+  rotorRadius: 0.69,
 } as const;
 
 // ---------------------------------------------------------------- noise
@@ -916,10 +916,10 @@ function skids(parts: THREE.BufferGeometry[]): void {
 /** 单片木质桨叶：沿 +X 伸展，3 段折出下垂弧度。 */
 function rotorBlade(): THREE.BufferGeometry {
   const st: Array<{ r: number; c: number; y: number }> = [
-    { r: 0.028, c: 0.023, y: 0 },
-    { r: 0.11, c: 0.03, y: -0.003 },
-    { r: 0.24, c: 0.027, y: -0.011 },
-    { r: DIM.rotorRadius, c: 0.014, y: -0.025 },
+    { r: 0.042, c: 0.024, y: 0 },
+    { r: 0.225, c: 0.038, y: -0.004 },
+    { r: 0.48, c: 0.034, y: -0.018 },
+    { r: DIM.rotorRadius, c: 0.018, y: -0.042 },
   ];
   const t = 0.0055;
   const positions: number[] = [];
@@ -1019,21 +1019,21 @@ function stern(parts: THREE.BufferGeometry[]): void {
     }
   }
 
-  // 尾桅 + 横桁 + 破帆
-  parts.push(mapCell(strut([0, 0.125, 0.345], [0, 0.295, 0.345], 0.008, 5), 'spar'));
-  parts.push(mapCell(strut([-0.078, 0.255, 0.345], [0.078, 0.255, 0.345], 0.004, 4), 'spar'));
+  // 尾桅 + 横桁 + 破帆（压低于桨盘，避免大半径桨叶扫到桅顶）
+  parts.push(mapCell(strut([0, 0.125, 0.345], [0, 0.26, 0.345], 0.008, 5), 'spar'));
+  parts.push(mapCell(strut([-0.078, 0.24, 0.345], [0.078, 0.24, 0.345], 0.004, 4), 'spar'));
   parts.push(
     mapCell(
       quadGeometry(
-        [-0.072, 0.252, 0.346],
-        [0.072, 0.252, 0.346],
+        [-0.072, 0.237, 0.346],
+        [0.072, 0.237, 0.346],
         [0.05, 0.135, 0.342],
         [-0.045, 0.125, 0.342],
       ),
       'canvas',
     ),
   );
-  parts.push(mapCell(strut([0, 0.295, 0.345], [0, 0.095, 0.44], 0.0025, 3), 'rope'));
+  parts.push(mapCell(strut([0, 0.26, 0.345], [0, 0.095, 0.44], 0.0025, 3), 'rope'));
 
   // 尾梁 + 铁箍
   parts.push(mapCell(strut([0, 0.065, 0.325], [0, 0.095, 0.445], 0.01, 5), 'spar'));
