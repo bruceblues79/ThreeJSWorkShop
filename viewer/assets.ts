@@ -55,23 +55,19 @@ export const ASSETS: AssetEntry[] = [
   },
   {
     id: 'ornithopter',
-    label: '海盗扑翼飞行器 v1',
+    label: '海盗扑翼飞行器 v2（定翼）',
     create: createOrnithopter,
     yawRange: 45,
     pitchMin: -25,
     pitchMax: 35,
     pitch: 0,
     pitchNode: 'ornithopter',
-    lift: 0.24,
+    lift: 0.27,
     animate: (root, time) => {
-      const left = root.getObjectByName('wing_left');
-      const right = root.getObjectByName('wing_right');
-      if (!left || !right) return;
-      const swing = 0.35 * Math.sin(time * 10);
-      right.rotation.z = swing;
-      left.rotation.z = -swing;
+      const main = root.getObjectByName('propeller-main');
+      if (main) main.rotation.y = time * 12;
     },
-    note: '船头 -Z · 机腹货舱口 (0,-0.158,0.032) · 翼展约 1.30 m<br />扑翼预览放慢（游戏 40 rad/s）',
+    note: '船头 -Z · 机头木桨 12 rad/s · 翼展约 1.64 m<br />机腹投石口 (0,-0.158,0.042) · 无扑翼节点',
   },
   {
     id: 'bombardier',
