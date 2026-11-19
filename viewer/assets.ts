@@ -67,7 +67,7 @@ export const ASSETS: AssetEntry[] = [
       const main = root.getObjectByName('propeller-main');
       if (main) main.rotation.y = time * 12;
     },
-    note: '船头 -Z · 机头木桨 12 rad/s · 翼展约 1.64 m<br />机腹投石口 (0,-0.158,0.042) · 无扑翼节点',
+    note: '船头 -Z · 机头木桨 12 rad/s · 翼展约 1.40 m<br />机腹投石口 (0,-0.158,0.042) · 无扑翼节点',
   },
   {
     id: 'bombardier',

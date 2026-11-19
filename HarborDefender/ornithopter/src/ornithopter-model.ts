@@ -144,7 +144,6 @@ const CELL = {
   canvas: { x: 384, y: 0, size: 128 },
   window: { x: 256, y: 128, size: 64 },
   gear: { x: 320, y: 128, size: 64 },
-  lantern: { x: 384, y: 128, size: 64 },
   iron: { x: 0, y: 256, size: 128 },
   brass: { x: 128, y: 256, size: 64 },
   dark: { x: 192, y: 256, size: 64 },
@@ -349,31 +348,6 @@ function buildGearCell(): CellMaps {
   return { color: albedo, rm: solidRm(size, [0.35, 0.5], 1, 0.04, SEED + 229) };
 }
 
-/** 翼尖灯笼：暖色灯芯 + 铁框。 */
-function buildLanternCell(): CellMaps {
-  const size = 64;
-  const [albedo, ctx] = makeCanvas(size);
-  ctx.fillStyle = '#2a1c10';
-  ctx.fillRect(0, 0, size, size);
-  const glow = ctx.createRadialGradient(32, 32, 3, 32, 32, 26);
-  glow.addColorStop(0, '#ffd98a');
-  glow.addColorStop(0.55, '#e8a33a');
-  glow.addColorStop(1, '#7a4d16');
-  ctx.fillStyle = glow;
-  ctx.fillRect(6, 6, size - 12, size - 12);
-  ctx.strokeStyle = '#241a10';
-  ctx.lineWidth = 3;
-  for (let i = 0; i < 4; i++) {
-    const x = 6 + (i * (size - 12)) / 3;
-    ctx.beginPath();
-    ctx.moveTo(x, 6);
-    ctx.lineTo(x, size - 6);
-    ctx.stroke();
-  }
-  ctx.strokeRect(4, 4, size - 8, size - 8);
-  return { color: albedo, rm: solidRm(size, [0.35, 0.48], 0.15, 0.05, SEED + 239) };
-}
-
 function buildBrassCell(): CellMaps {
   const size = 64;
   const [albedo, ctx] = makeCanvas(size);
@@ -400,7 +374,6 @@ function buildAtlas() {
     canvas: buildCanvasCell,
     window: buildWindowCell,
     gear: buildGearCell,
-    lantern: buildLanternCell,
     iron: buildIronCell,
     brass: buildBrassCell,
     dark: buildDarkCell,
@@ -847,12 +820,12 @@ function wingParts(side: 1 | -1): THREE.BufferGeometry[] {
   const flip = side < 0;
   const p = (x: number, y: number, z: number): Vec3 => [side * x, y, z];
 
-  const L0 = p(0.1, 0.098, -0.145);
-  const L1 = p(0.46, 0.142, -0.118);
-  const L2 = p(0.82, 0.188, 0.008);
-  const T0 = p(0.125, 0.094, 0.235);
-  const T1 = p(0.445, 0.138, 0.176);
-  const T2 = p(0.8, 0.184, 0.126);
+  const L0 = p(0.085, 0.098, -0.145);
+  const L1 = p(0.391, 0.142, -0.118);
+  const L2 = p(0.697, 0.188, 0.008);
+  const T0 = p(0.106, 0.094, 0.235);
+  const T1 = p(0.378, 0.138, 0.176);
+  const T2 = p(0.68, 0.184, 0.126);
 
   // 帆布翼面
   parts.push(mapCell(quadGeometry(L0, L1, T1, T0, flip), 'canvas'));
@@ -870,23 +843,12 @@ function wingParts(side: 1 | -1): THREE.BufferGeometry[] {
   parts.push(mapCell(strut(L2, T2, 0.0045, 3), 'spar'));
 
   // 翼根短梁：接机身肩座
-  const root: Vec3 = p(0.09, 0.095, -0.02);
+  const root: Vec3 = p(0.076, 0.095, -0.02);
   parts.push(mapCell(strut(root, L0, 0.009, 3), 'spar'));
   parts.push(mapCell(strut(root, T0, 0.007, 3), 'spar'));
 
   // 斜撑：机身肩部到翼后段
-  parts.push(mapCell(strut(p(0.09, 0.052, 0.11), p(0.43, 0.13, 0.166), 0.0055, 3), 'spar'));
-
-  // 翼尖灯笼：无端盖简化，低模只留剪影
-  const lx = side * 0.8;
-  parts.push(mapCell(strut([lx, 0.182, 0.1], [lx, 0.152, 0.1], 0.0025, 3), 'iron'));
-  const cap = new THREE.CylinderGeometry(0.006, 0.024, 0.016, 6, 1, true);
-  cap.translate(lx, 0.144, 0.1);
-  parts.push(mapCell(cap, 'iron'));
-  const body = new THREE.CylinderGeometry(0.024, 0.019, 0.062, 6, 1, true);
-  body.translate(lx, 0.105, 0.1);
-  parts.push(mapCell(body, 'lantern'));
-  parts.push(mapCell(box(0.016, 0.004, 0.004, lx, 0.156, 0.1), 'brass'));
+  parts.push(mapCell(strut(p(0.076, 0.052, 0.11), p(0.366, 0.13, 0.166), 0.0055, 3), 'spar'));
 
   return parts;
 }
