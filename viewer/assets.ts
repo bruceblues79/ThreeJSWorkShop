@@ -3,6 +3,7 @@ import { createCannon } from '../HarborDefender/cannon/src/cannon-model';
 import { createWall } from '../HarborDefender/wall/src/wall-model';
 import { createPirateShip } from '../HarborDefender/pirate-ship/src/pirate-ship-model';
 import { createOrnithopter } from '../HarborDefender/ornithopter/src/ornithopter-model';
+import { createBombardier } from '../HarborDefender/bombardier/src/bombardier-model';
 
 /**
  * 公用浏览台的资产注册表。
@@ -71,5 +72,21 @@ export const ASSETS: AssetEntry[] = [
       left.rotation.z = -swing;
     },
     note: '船头 -Z · 机腹货舱口 (0,-0.158,0.032) · 翼展约 1.30 m<br />扑翼预览放慢（游戏 40 rad/s）',
+  },
+  {
+    id: 'bombardier',
+    label: '海盗轰炸机 v1',
+    create: createBombardier,
+    yawRange: 45,
+    pitchMin: -25,
+    pitchMax: 35,
+    pitch: 0,
+    pitchNode: 'bombardier',
+    lift: 0.3,
+    animate: (root, time) => {
+      const rotor = root.getObjectByName('propeller-main');
+      if (rotor) rotor.rotation.y = time * 8;
+    },
+    note: '船头 -Z · 四叶主旋翼 8 rad/s（真实）· 投弹口 (0,-0.1785,-0.102)<br />顶部 y=0.359（保持 barY 0.479）',
   },
 ];
