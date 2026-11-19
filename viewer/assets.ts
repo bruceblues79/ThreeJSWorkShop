@@ -5,6 +5,7 @@ import { createPirateShip } from '../HarborDefender/pirate-ship/src/pirate-ship-
 import { createOrnithopter } from '../HarborDefender/ornithopter/src/ornithopter-model';
 import { createBombardier } from '../HarborDefender/bombardier/src/bombardier-model';
 import { createBossIslewrath } from '../HarborDefender/boss_islewrath/src/boss-islewrath-model';
+import { createPirateChief } from '../HarborDefender/pirate_chief/src/pirate-chief-model';
 
 /**
  * 公用浏览台的资产注册表。
@@ -96,5 +97,16 @@ export const ASSETS: AssetEntry[] = [
     pitch: 0,
     pitchNode: 'gun_rotate_1',
     note: '船头 -Z · 后二炮台基座 0.94 / 前二 0.66 · 副炮 0.75 倍 / 主炮 0.675 倍',
+  },
+  {
+    id: 'pirate-chief',
+    label: '海盗船长 boss 头 v1',
+    create: createPirateChief,
+    yawRange: 45,
+    pitchMin: -15,
+    pitchMax: 15,
+    pitch: 0,
+    pitchNode: 'pirate-chief',
+    note: '坐垫 y=0 · 面朝 -Z · 0.41 × 0.433 × 0.41 m · 三角帽 / 铁面口罩 / 独眼',
   },
 ];
