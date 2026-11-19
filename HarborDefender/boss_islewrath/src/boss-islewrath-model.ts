@@ -663,48 +663,44 @@ export function createBossIslewrath(): THREE.Group {
   addStatic(box(0.18, 0.022, 0.3, -0.79, deckY + 0.23, 0.02, 0, 0, 0.55), 'wood');
   addStatic(box(0.18, 0.022, 0.3, -0.65, deckY + 0.23, 0.02, 0, 0, -0.55), 'wood');
   addStatic(box(0.012, 0.14, 0.11, -0.588, deckY + 0.1, 0.02), 'wood');
-  // ---- 中央炮塔基座
-  addStatic(
-    lathe(
-      [
-        [0.44, deckY],
-        [0.46, 0.52],
-        [0.44, 0.78],
-        [0.41, 0.96],
-        [0.38, 1.04],
-        [0.35, 1.1],
-      ],
-      20,
-    ),
-    'red',
-  );
+  // ---- 中央炮塔基座：三层梯田收分，顶层缩到激光炮底座尺寸
+  const TOWER = [
+    { y0: deckY, y1: 0.74, r0: 0.46, r1: 0.44 },
+    { y0: 0.74, y1: 0.96, r0: 0.385, r1: 0.365 },
+    { y0: 0.96, y1: 1.16, r0: 0.315, r1: 0.27 },
+  ];
+  for (const t of TOWER) {
+    addStatic(
+      lathe(
+        [
+          [t.r0, t.y0],
+          [t.r0 + 0.004, (t.y0 + t.y1) * 0.5],
+          [t.r1, t.y1],
+        ],
+        20,
+      ),
+      'red',
+    );
+    // 每层顶沿一圈铁箍
+    addStatic(torus(t.r1 + 0.003, 0.011, 0, t.y1 - 0.015, 0, Math.PI / 2, 0, 0, 3, 20), 'rust');
+  }
+  // 台阶顶面封板（环形，避开上层）
+  for (let i = 1; i < TOWER.length; i++) {
+    const lower = TOWER[i - 1];
+    const ledge = new THREE.RingGeometry(TOWER[i].r0 - 0.012, lower.r1 + 0.003, 20);
+    ledge.rotateX(-Math.PI / 2);
+    addStatic(transform(ledge, 0, lower.y1, 0), 'iron');
+  }
+  const towerCap = new THREE.CircleGeometry(TOWER[2].r1, 20);
+  towerCap.rotateX(-Math.PI / 2);
+  addStatic(transform(towerCap, 0, TOWER[2].y1, 0), 'iron');
   for (let i = 0; i < 10; i++) {
     const a = (i / 10) * Math.PI * 2 + 0.15;
     addStatic(
-      box(0.05, 0.4, 0.026, Math.cos(a) * 0.443, 0.68, Math.sin(a) * 0.443, 0, Math.PI / 2 - a, 0),
+      box(0.05, 0.24, 0.026, Math.cos(a) * 0.449, 0.6, Math.sin(a) * 0.449, 0, Math.PI / 2 - a, 0),
       'iron',
     );
   }
-  addStatic(torus(0.448, 0.016, 0, 0.62, 0, Math.PI / 2, 0, 0, 3, 20), 'rust');
-  addStatic(torus(0.428, 0.014, 0, 0.92, 0, Math.PI / 2, 0, 0, 3, 20), 'rust');
-  addStatic(
-    lathe(
-      [
-        [0.38, 1.04],
-        [0.43, 1.08],
-        [0.42, 1.14],
-        [0.36, 1.16],
-      ],
-      20,
-    ),
-    'iron',
-  );
-  const towerCap = new THREE.CircleGeometry(0.35, 20);
-  towerCap.rotateX(-Math.PI / 2);
-  addStatic(transform(towerCap, 0, 1.1, 0), 'iron');
-  const collarCap = new THREE.RingGeometry(0.145, 0.365, 20);
-  collarCap.rotateX(-Math.PI / 2);
-  addStatic(transform(collarCap, 0, 1.16, 0), 'iron');
 
   // ---- 四座炮台（基座与装甲罩静态，炮管随 gun_rotate_N 俯仰）
   const turrets = [
@@ -801,6 +797,8 @@ export function createBossIslewrath(): THREE.Group {
   laserRotate.scale.setScalar(DIM.laserScale);
 
   const laserGeo: THREE.BufferGeometry[] = [];
+  /** 能量包沿炮轴前移，使壳体居中于炮座（炮管与 muzzle 不动） */
+  const packShift = -0.2;
   const housing = lathe(
     [
       [0.03, -0.26],
@@ -815,10 +813,10 @@ export function createBossIslewrath(): THREE.Group {
     20,
   );
   housing.rotateX(Math.PI / 2);
-  housing.translate(0, 0, 0.06);
+  housing.translate(0, 0, 0.06 + packShift);
   laserGeo.push(mapCell(housing, 'red'));
-  laserGeo.push(mapCell(torus(0.292, 0.018, 0, 0, 0.08, 0, 0, 0, 3, 20), 'iron'));
-  laserGeo.push(mapCell(torus(0.268, 0.016, 0, 0, 0.32, 0, 0, 0, 3, 20), 'iron'));
+  laserGeo.push(mapCell(torus(0.292, 0.018, 0, 0, 0.08 + packShift, 0, 0, 0, 3, 20), 'iron'));
+  laserGeo.push(mapCell(torus(0.268, 0.016, 0, 0, 0.32 + packShift, 0, 0, 0, 3, 20), 'iron'));
 
   const laserBarrel = lathe(
     [
@@ -839,10 +837,14 @@ export function createBossIslewrath(): THREE.Group {
   laserGeo.push(mapCell(torus(0.168, 0.018, 0, 0, DIM.laserMuzzleZ + 0.22, 0, 0, 0, 3, 18), 'rust'));
   laserGeo.push(mapCell(torus(0.188, 0.018, 0, 0, DIM.laserMuzzleZ + 0.44, 0, 0, 0, 3, 18), 'rust'));
   laserGeo.push(mapCell(transform(new THREE.CircleGeometry(0.21, 18), 0, 0, -0.2), 'bore'));
+  // 炮口端面（填住红芯外圈，避免看穿炮管）
+  const mouthFace = new THREE.RingGeometry(0.086, 0.116, 18);
+  mouthFace.rotateY(Math.PI);
+  laserGeo.push(mapCell(transform(mouthFace, 0, 0, DIM.laserMuzzleZ + 0.001), 'bore'));
 
   // 侧前装甲上的骷髅徽记
   const skull = new THREE.PlaneGeometry(0.22, 0.22);
-  laserGeo.push(mapCell(transform(skull, -0.297, 0.06, 0.12, 0, -Math.PI / 2, 0), 'skull'));
+  laserGeo.push(mapCell(transform(skull, -0.297, 0.06, 0.12 + packShift, 0, -Math.PI / 2, 0), 'skull'));
 
   const laserMesh = new THREE.Mesh(mergeAll(laserGeo), mats.atlas);
   laserMesh.name = 'laser-cannon';
@@ -850,13 +852,13 @@ export function createBossIslewrath(): THREE.Group {
   laserMesh.receiveShadow = true;
   laserRotate.add(laserMesh);
 
-  // 炮口红芯与炮身下方红色辉光环（不受光照）
+  // 炮口红芯（短柱体，带厚度，避免共面闪烁）与炮身赤道辉光环
   const glowGeo: THREE.BufferGeometry[] = [];
-  const lens = new THREE.CircleGeometry(0.088, 18);
-  lens.rotateY(Math.PI);
-  glowGeo.push(transform(lens, 0, 0, DIM.laserMuzzleZ - 0.004));
+  const lens = new THREE.CylinderGeometry(0.086, 0.086, 0.05, 18);
+  lens.rotateX(Math.PI / 2);
+  glowGeo.push(transform(lens, 0, 0, DIM.laserMuzzleZ + 0.02));
   glowGeo.push(torus(0.13, 0.02, 0, 0, DIM.laserMuzzleZ + 0.005, 0, 0, 0, 3, 18));
-  glowGeo.push(torus(0.295, 0.014, 0, -0.07, 0.08, Math.PI / 2, 0, 0, 3, 20));
+  glowGeo.push(torus(0.294, 0.014, 0, 0, 0.11 + packShift, 0, 0, 0, 3, 20));
   const glowMesh = new THREE.Mesh(mergeAll(glowGeo), mats.glow);
   glowMesh.name = 'laser-core';
   laserRotate.add(glowMesh);
