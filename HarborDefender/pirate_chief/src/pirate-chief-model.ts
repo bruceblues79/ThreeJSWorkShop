@@ -506,22 +506,24 @@ export function createPirateChief(): THREE.Group {
   put(box(0.01, 0.01, 0.008, CELL.rust).translate(0.066, 0.19, -0.104) as THREE.BufferGeometry);
 
   // ---- 独眼：向外突出的巨型激光镜筒 + 红色镜芯，另一侧铁眼罩 + 骨色骷髅纹
-  put(cylinderZ(0.043, 0.05, 0.05, 0.240, -0.095, 12, CELL.iron));
-  put(torusZ(0.038, 0.007, 0.05, 0.240, -0.118, 12, 5, CELL.rust));
-  glow.push(cylinderZ(0.034, 0.014, 0.05, 0.240, -0.115, 12, CELL.red));
+  // 三层同轴件严格留缝：镜筒 Φ0.086（端面 z=-0.115）→ 锈镜圈（z=-0.122，内孔 Φ0.068）
+  // → 发光镜芯 Φ0.060（中心 z=-0.119，前端 -0.125，缩在镜圈内 3 mm），彼此不叠面。
+  put(cylinderZ(0.043, 0.046, 0.05, 0.240, -0.092, 12, CELL.iron));
+  put(torusZ(0.04, 0.006, 0.05, 0.240, -0.122, 12, 5, CELL.rust));
+  glow.push(cylinderZ(0.03, 0.012, 0.05, 0.240, -0.119, 12, CELL.red));
 
   put(cylinderZ(0.052, 0.008, -0.047, 0.258, -0.092, 12, CELL.dark));
   put(cylinderZ(0.046, 0.014, -0.047, 0.258, -0.098, 12, CELL.iron));
-  put(box(0.02, 0.022, 0.006, CELL.bone).translate(-0.047, 0.258, -0.107) as THREE.BufferGeometry);
+  put(box(0.02, 0.022, 0.006, CELL.bone).translate(-0.047, 0.258, -0.109) as THREE.BufferGeometry);
   put(
     box(0.032, 0.006, 0.005, CELL.bone)
       .rotateZ(0.7)
-      .translate(-0.047, 0.246, -0.107) as THREE.BufferGeometry,
+      .translate(-0.047, 0.246, -0.109) as THREE.BufferGeometry,
   );
   put(
     box(0.032, 0.006, 0.005, CELL.bone)
       .rotateZ(-0.7)
-      .translate(-0.047, 0.246, -0.107) as THREE.BufferGeometry,
+      .translate(-0.047, 0.246, -0.109) as THREE.BufferGeometry,
   );
 
   // ---- 三角帽：帽檐内沿贴住帽冠底圈，外沿两侧上翻；锥形帽冠 + 帽带
@@ -550,9 +552,9 @@ export function createPirateChief(): THREE.Group {
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2;
     put(
-      box(0.01, 0.01, 0.008, CELL.rust)
-        .rotateY(-a)
-        .translate(Math.cos(a) * 0.135, 0.323, Math.sin(a) * 0.135) as THREE.BufferGeometry,
+      box(0.01, 0.01, 0.01, CELL.rust)
+        .rotateY(Math.PI / 2 - a)
+        .translate(Math.cos(a) * 0.1335, 0.323, Math.sin(a) * 0.1335) as THREE.BufferGeometry,
     );
   }
 
