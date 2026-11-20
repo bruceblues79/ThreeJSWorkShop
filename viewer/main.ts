@@ -172,8 +172,8 @@ function frame() {
 function applyPose() {
   if (!mounted) return;
   mounted.root.rotation.y = THREE.MathUtils.degToRad(pose.yaw);
-  const gun = mounted.root.getObjectByName('gun_rotate');
-  if (gun) gun.rotation.x = THREE.MathUtils.degToRad(pose.pitch);
+  const node = mounted.root.getObjectByName(mounted.entry.pitchNode ?? 'gun_rotate');
+  if (node) node.rotation.x = THREE.MathUtils.degToRad(pose.pitch);
   if (yawInput) yawInput.value = String(pose.yaw);
   if (pitchInput) pitchInput.value = String(pose.pitch);
   if (yawOut) yawOut.textContent = `${pose.yaw.toFixed(0)}°`;
@@ -221,6 +221,7 @@ function mount(entry: AssetEntry) {
   if (mounted) scene.remove(mounted.root);
 
   const root = entry.create();
+  if (entry.lift) root.position.y = entry.lift;
   scene.add(root);
   root.updateMatrixWorld(true);
   const bounds = new THREE.Box3().setFromObject(root);
@@ -235,6 +236,8 @@ function mount(entry: AssetEntry) {
     pitchInput.min = String(entry.pitchMin ?? 0);
     pitchInput.max = String(entry.pitchMax ?? 80);
   }
+  // 飞行器允许环绕到机腹检查投石口；地面资产仍限制在地面以上
+  controls.maxPolarAngle = entry.lift ? Math.PI * 0.82 : Math.PI * 0.495;
 
   pose = {
     yaw: Number(params.get('yaw') ?? 0),
@@ -304,7 +307,11 @@ new ResizeObserver(resize).observe(app);
 addEventListener('resize', resize);
 
 let frames = 0;
+const clock = new THREE.Clock();
+let elapsed = 0;
 function tick() {
+  elapsed += clock.getDelta();
+  if (mounted?.entry.animate) mounted.entry.animate(mounted.root, elapsed);
   controls.update();
   renderer.render(scene, camera);
   frames++;
