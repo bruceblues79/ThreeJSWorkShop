@@ -42,9 +42,9 @@ export const ASSETS: AssetEntry[] = [
   },
   {
     id: 'wall',
-    label: '城防港城墙 v5',
+    label: '城防港城墙 v6',
     create: createWall,
-    note: '墙顶 y=0.8 · 炮位 x=±0.75/0 · 3.0 m 垛口护墙',
+    note: '墙顶 y=0.8 · 炮位 x=±0.75/0 · 3.0 m 垛口护墙 · 墙顶 3 处积水',
   },
   {
     id: 'pirate-ship',
