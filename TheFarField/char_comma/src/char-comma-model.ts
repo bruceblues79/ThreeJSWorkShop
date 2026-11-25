@@ -2,19 +2,16 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 /**
- * TheFarField 角色原型 comma（参考 TheFarField/char_comma/IMG_comma_3.jpeg）。
- * 木偶玩具风格：圆盘木头脑 + 顶部卷须、细木关节四肢、灰布束腰长衫、
- * 红围巾、双圈皮带、帆布背包（铺盖卷 + 水壶）。
+ * TheFarField 角色 comma v3 — 严格按 IMG_comma_3.jpeg 三视图重做。
  *
  * 契约：
- *   - 根节点 char_comma，脚底 y = 0，面朝 -Z，总高 1.80 m（含头顶卷须）；
- *   - 关节节点：head_joint / shoulder_l|r / elbow_l|r / wrist_l|r /
- *     hip_l|r / knee_l|r / ankle_l|r，均为 Object3D 枢轴，网格挂在其下；
- *   - 贴图：2048 颜色图集；1024 粗糙度(G) + 金属度(B) 共用图集；1024 法线；
- *   - 单一 MeshStandardMaterial，所有分件共享。
+ *   - 根节点 char_comma，脚底 y=0，面朝 -Z，总高 1.80 m（含卷须）
+ *   - 关节 head_joint / shoulder_l|r / elbow_l|r / wrist_l|r / hip_l|r / knee_l|r / ankle_l|r
+ *   - 单图集 PBR：2048 颜色 + 1024 粗糙/金属 + 1024 法线，单一 MeshStandardMaterial
+ *   - 臂展 1.80 m（指尖到指尖），躯干 + 长衫 + 背包并入 body，除四肢外仅头为独立关节
  */
 
-const SEED = 20261121;
+const SEED = 20261125;
 const ATLAS = 2048;
 const AUX = 1024;
 const TAU = Math.PI * 2;
@@ -35,27 +32,18 @@ function makeNoise(seed: number): (x: number, y: number) => number {
   const rnd = mulberry32(seed);
   const perm = new Uint8Array(512);
   const vals = new Float32Array(256);
-  for (let i = 0; i < 256; i++) {
-    perm[i] = i;
-    vals[i] = rnd();
-  }
+  for (let i = 0; i < 256; i++) { perm[i] = i; vals[i] = rnd(); }
   for (let i = 255; i > 0; i--) {
     const j = Math.floor(rnd() * (i + 1));
-    const t = perm[i];
-    perm[i] = perm[j];
-    perm[j] = t;
+    const t = perm[i]; perm[i] = perm[j]; perm[j] = t;
   }
   for (let i = 0; i < 256; i++) perm[i + 256] = perm[i];
-
   const fade = (t: number) => t * t * t * (t * (t * 6 - 15) + 10);
   const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
   const lattice = (x: number, y: number) => vals[perm[(perm[x & 255] + (y & 255)) & 511]];
-
   return (x, y) => {
-    const xi = Math.floor(x);
-    const yi = Math.floor(y);
-    const u = fade(x - xi);
-    const v = fade(y - yi);
+    const xi = Math.floor(x); const yi = Math.floor(y);
+    const u = fade(x - xi); const v = fade(y - yi);
     return lerp(
       lerp(lattice(xi, yi), lattice(xi + 1, yi), u),
       lerp(lattice(xi, yi + 1), lattice(xi + 1, yi + 1), u),
@@ -64,18 +52,13 @@ function makeNoise(seed: number): (x: number, y: number) => number {
   };
 }
 
-function fbm(noise: (x: number, y: number) => number, x: number, y: number, octaves = 3): number {
-  let value = 0;
-  let amp = 0.5;
-  let freq = 1;
-  let total = 0;
-  for (let i = 0; i < octaves; i++) {
-    value += amp * noise(x * freq, y * freq);
-    total += amp;
-    amp *= 0.5;
-    freq *= 2.03;
+function fbm(noise: (x: number, y: number) => number, x: number, y: number, oct = 3): number {
+  let v = 0, amp = 0.5, freq = 1, total = 0;
+  for (let i = 0; i < oct; i++) {
+    v += amp * noise(x * freq, y * freq);
+    total += amp; amp *= 0.5; freq *= 2.03;
   }
-  return value / total;
+  return v / total;
 }
 
 // ---------------------------------------------------------------- color
@@ -86,9 +69,8 @@ type Paint = (u: number, v: number) => Pixel;
 
 const clamp01 = (t: number) => (t < 0 ? 0 : t > 1 ? 1 : t);
 const clamp255 = (t: number) => (t < 0 ? 0 : t > 255 ? 255 : t);
-const smoothstep = (edge0: number, edge1: number, x: number) => {
-  const t = clamp01((x - edge0) / (edge1 - edge0));
-  return t * t * (3 - 2 * t);
+const smoothstep = (e0: number, e1: number, x: number) => {
+  const t = clamp01((x - e0) / (e1 - e0)); return t * t * (3 - 2 * t);
 };
 function mix3(a: RGB, b: RGB, t: number): RGB {
   const k = clamp01(t);
@@ -98,72 +80,30 @@ function toPixel(c: RGB, h: number, shade = 1): Pixel {
   return { r: clamp255(c[0] * shade), g: clamp255(c[1] * shade), b: clamp255(c[2] * shade), h: clamp255(h) };
 }
 
-// ---------------------------------------------------------------- atlas cells
+// ---------------------------------------------------------------- painters
 
-/** 图集分格（像素坐标，canvas 左上为原点）。改这里必须同步 uvRect。 */
-const CELL = {
-  wood: { x: 0, y: 0, size: 768 },
-  woodEnd: { x: 768, y: 0, size: 512 },
-  cloth: { x: 1280, y: 0, size: 512 },
-  scarf: { x: 1792, y: 0, size: 256 },
-  leather: { x: 0, y: 768, size: 512 },
-  canvas: { x: 512, y: 768, size: 512 },
-  metal: { x: 1024, y: 768, size: 256 },
-  glass: { x: 1280, y: 768, size: 256 },
-  rope: { x: 1536, y: 768, size: 256 },
-  dark: { x: 1792, y: 768, size: 256 },
-} as const;
-
-type CellName = keyof typeof CELL;
-
-/** 每格 G=roughness、B=metalness（单一材质，靠贴图区分材质感）。 */
-const CELL_RM: Record<CellName, readonly [number, number]> = {
-  wood: [0.62, 0],
-  woodEnd: [0.68, 0],
-  cloth: [0.93, 0],
-  scarf: [0.9, 0],
-  leather: [0.56, 0],
-  canvas: [0.95, 0],
-  metal: [0.4, 1],
-  glass: [0.14, 0],
-  rope: [0.86, 0],
-  dark: [0.95, 0],
-};
-
-// ---------------------------------------------------------------- paints
-
-/** 纵向木纹：纹理 v 方向为木料长轴。 */
 function woodPaint(seed: number, base: RGB, dark: RGB): Paint {
   const n1 = makeNoise(seed);
   const n2 = makeNoise(seed + 7);
   const n3 = makeNoise(seed + 13);
-  const knotU = 0.34;
   return (u, v) => {
     const warp = fbm(n1, u * 3.2, v * 0.55, 2);
     const g = fbm(n2, u * 9 + warp * 2.4, v * 0.5, 3);
     const streak = smoothstep(0.5, 0.78, g);
     const fiber = fbm(n3, u * 140, v * 2.6, 2) - 0.5;
-    const ku = u - knotU;
-    const kv = v - 0.56;
-    const kd = Math.hypot(ku, kv * 0.5);
-    const knot = kd < 0.075 ? Math.exp(-(kd * kd) / 0.0011) : 0;
-    const ring = kd < 0.11 ? Math.max(0, Math.sin(kd * 230)) * 0.06 : 0;
-    const t = clamp01(streak * 0.55 + fiber * 0.35 + knot * 0.85 + ring);
+    const t = clamp01(streak * 0.55 + fiber * 0.35);
     const c = mix3(base, dark, t);
     const dirt = fbm(n1, u * 1.4, v * 1.1, 2);
-    const shade = 1 - (dirt - 0.5) * 0.08;
-    return toPixel(c, 138 + streak * 46 + fiber * 26 - knot * 58 + ring * 18, shade);
+    return toPixel(c, 138 + streak * 46 + fiber * 26, 1 - (dirt - 0.5) * 0.08);
   };
 }
 
-/** 端面年轮：同心环 + 径向裂纹 + 髓心。 */
 function woodEndPaint(seed: number, base: RGB, dark: RGB): Paint {
   const n1 = makeNoise(seed);
   const n2 = makeNoise(seed + 5);
   const n3 = makeNoise(seed + 11);
   return (u, v) => {
-    const dx = u - 0.5;
-    const dy = v - 0.5;
+    const dx = u - 0.5; const dy = v - 0.5;
     const r = Math.hypot(dx, dy) * 2;
     const a = Math.atan2(dy, dx);
     const wob = fbm(n1, u * 5, v * 5, 2) * 7;
@@ -178,12 +118,10 @@ function woodEndPaint(seed: number, base: RGB, dark: RGB): Paint {
     }
     const pith = r < 0.055 ? 1 - r / 0.055 : 0;
     const grain = fbm(n3, u * 90, v * 90, 2) - 0.5;
-    const shade = 1 - crack * 0.34 - pith * 0.22;
-    return toPixel(c, 140 + rings * 34 + grain * 18 - crack * 80 - pith * 40, shade);
+    return toPixel(c, 140 + rings * 34 + grain * 18 - crack * 80 - pith * 40, 1 - crack * 0.34 - pith * 0.22);
   };
 }
 
-/** 织物：经纬交织 + 大尺度脏污/褶皱明暗。 */
 function clothPaint(seed: number, base: RGB, dark: RGB, weaveFreq: number): Paint {
   const n1 = makeNoise(seed);
   const n2 = makeNoise(seed + 3);
@@ -195,12 +133,10 @@ function clothPaint(seed: number, base: RGB, dark: RGB, weaveFreq: number): Pain
     const mottle = fbm(n1, u * 4.5, v * 3.2, 3) - 0.5;
     const fold = smoothstep(0.54, 0.86, fbm(n2, u * 7 + 3, v * 2.6, 2));
     const t = clamp01(0.14 + slub * 0.3 + weave * 0.18 + mottle * 0.36 + fold * 0.4);
-    const c = mix3(base, dark, t);
-    return toPixel(c, 120 + weave * 52 + slub * 46 + fold * 34);
+    return toPixel(mix3(base, dark, t), 120 + weave * 52 + slub * 46 + fold * 34);
   };
 }
 
-/** 皮革：细颗粒 + 折痕。 */
 function leatherPaint(seed: number, base: RGB, dark: RGB): Paint {
   const n1 = makeNoise(seed);
   const n2 = makeNoise(seed + 4);
@@ -209,12 +145,10 @@ function leatherPaint(seed: number, base: RGB, dark: RGB): Paint {
     const pore = Math.abs(Math.sin(u * 620) * Math.sin(v * 680));
     const crease = Math.max(0, fbm(n2, u * 11, v * 7, 2) - 0.62) * 2.4;
     const t = clamp01(0.2 + grain * 0.35 + pore * 0.12 + crease * 0.5);
-    const c = mix3(base, dark, t);
-    return toPixel(c, 120 + grain * 50 + pore * 30 - crease * 30);
+    return toPixel(mix3(base, dark, t), 120 + grain * 50 + pore * 30 - crease * 30);
   };
 }
 
-/** 帆布：粗纬 + 大片水渍。 */
 function canvasPaint(seed: number, base: RGB, dark: RGB): Paint {
   const n1 = makeNoise(seed);
   const n2 = makeNoise(seed + 8);
@@ -224,12 +158,10 @@ function canvasPaint(seed: number, base: RGB, dark: RGB): Paint {
     const mottle = fbm(n1, u * 5, v * 4, 3) - 0.5;
     const stain = smoothstep(0.58, 0.78, fbm(n2, u * 3 + 7, v * 2.4, 3));
     const t = clamp01(0.16 + weave * 0.22 + mottle * 0.4 + stain * 0.4);
-    const c = mix3(base, dark, t);
-    return toPixel(c, 118 + weave * 60 + mottle * 30 - stain * 22);
+    return toPixel(mix3(base, dark, t), 118 + weave * 60 + mottle * 30 - stain * 22);
   };
 }
 
-/** 铁件：竖向拉丝 + 划痕。 */
 function metalPaint(seed: number, base: RGB, dark: RGB): Paint {
   const n1 = makeNoise(seed);
   const n2 = makeNoise(seed + 6);
@@ -237,57 +169,68 @@ function metalPaint(seed: number, base: RGB, dark: RGB): Paint {
     const brush = Math.sin(u * 900 + fbm(n1, u * 6, v * 3, 2) * 4) * 0.5 + 0.5;
     const scratch = smoothstep(0.62, 0.9, fbm(n2, u * 24, v * 3.5, 2));
     const t = clamp01(0.2 + brush * 0.24 + scratch * 0.5);
-    const c = mix3(base, dark, t);
-    return toPixel(c, 126 + brush * 20 - scratch * 26);
+    return toPixel(mix3(base, dark, t), 126 + brush * 20 - scratch * 26);
   };
 }
 
-/** 深绿玻璃瓶。 */
 function glassPaint(seed: number, base: RGB, dark: RGB): Paint {
   const n1 = makeNoise(seed);
   return (u, v) => {
     const band = Math.exp(-Math.pow((u - 0.3) / 0.045, 2));
     const t = clamp01(0.25 + (fbm(n1, u * 4, v * 4, 2) - 0.5) * 0.3 - band * 0.35);
-    const c = mix3(base, dark, t);
-    return toPixel(c, 118 + band * 40);
+    return toPixel(mix3(base, dark, t), 118 + band * 40);
   };
 }
 
-/** 麻绳。 */
 function ropePaint(seed: number, base: RGB, dark: RGB): Paint {
   const n1 = makeNoise(seed);
   return (u, v) => {
     const braid = 0.5 + 0.5 * Math.sin((u * 2 + v * 13) * TAU);
     const braid2 = 0.5 + 0.5 * Math.sin((u * 2 - v * 13) * TAU);
     const t = clamp01(0.2 + braid * braid2 * 0.5 + (fbm(n1, u * 30, v * 30, 2) - 0.5) * 0.2);
-    const c = mix3(base, dark, t);
-    return toPixel(c, 110 + braid * braid2 * 70);
+    return toPixel(mix3(base, dark, t), 110 + braid * braid2 * 70);
   };
 }
 
-/** 布料内侧/缝隙。 */
-function darkPaint(seed: number): Paint {
-  const n1 = makeNoise(seed);
-  const base: RGB = [62, 58, 52];
-  const dark: RGB = [34, 31, 28];
-  return (u, v) => {
-    const t = clamp01(fbm(n1, u * 20, v * 20, 2) * 0.7);
-    return toPixel(mix3(base, dark, t), 128 + t * 20);
-  };
-}
-
+// (painters section above)
 // ---------------------------------------------------------------- atlas
+
+const CELL = {
+  wood:    { x: 0,    y: 0,   size: 768 },
+  woodEnd: { x: 768,  y: 0,   size: 512 },
+  cloth:   { x: 1280, y: 0,   size: 512 },
+  scarf:   { x: 1792, y: 0,   size: 256 },
+  leather: { x: 0,    y: 768, size: 512 },
+  canvas:  { x: 512,  y: 768, size: 512 },
+  metal:   { x: 1024, y: 768, size: 256 },
+  glass:   { x: 1280, y: 768, size: 256 },
+  rope:    { x: 1536, y: 768, size: 256 },
+  dark:    { x: 1792, y: 768, size: 256 },
+} as const;
+type CellName = keyof typeof CELL;
+
+const CELL_RM: Record<CellName, readonly [number, number]> = {
+  wood:    [0.62, 0],
+  woodEnd: [0.68, 0],
+  cloth:   [0.93, 0],
+  scarf:   [0.90, 0],
+  leather: [0.56, 0],
+  canvas:  [0.95, 0],
+  metal:   [0.40, 1],
+  glass:   [0.14, 0],
+  rope:    [0.86, 0],
+  dark:    [0.95, 0],
+};
 
 function makeCanvas(size: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
   const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
+  canvas.width = size; canvas.height = size;
   const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('2D canvas is unavailable');
+  if (!ctx) throw new Error('2D canvas unavailable');
   return [canvas, ctx];
 }
 
-function texture(canvas: HTMLCanvasElement, srgb: boolean): THREE.CanvasTexture {
+function texOf(canvas: HTMLCanvasElement, srgb: boolean): THREE.CanvasTexture {
   const tex = new THREE.CanvasTexture(canvas);
   tex.wrapS = THREE.ClampToEdgeWrapping;
   tex.wrapT = THREE.ClampToEdgeWrapping;
@@ -296,40 +239,31 @@ function texture(canvas: HTMLCanvasElement, srgb: boolean): THREE.CanvasTexture 
   return tex;
 }
 
-/** 逐像素烘焙一个分格的颜色与高度（高度稍后合成 1024 法线）。 */
-function paintCell(size: number, paint: Paint): { color: HTMLCanvasElement; height: HTMLCanvasElement } {
-  const [color, colorCtx] = makeCanvas(size);
-  const [height, heightCtx] = makeCanvas(size);
-  const colorImage = colorCtx.createImageData(size, size);
-  const heightImage = heightCtx.createImageData(size, size);
-  const c = colorImage.data;
-  const h = heightImage.data;
+function paintCell(size: number, paint: Paint) {
+  const [color, cc] = makeCanvas(size);
+  const [height, hc] = makeCanvas(size);
+  const cimg = cc.createImageData(size, size);
+  const himg = hc.createImageData(size, size);
+  const cd = cimg.data; const hd = himg.data;
   for (let y = 0; y < size; y++) {
     const v = (y + 0.5) / size;
     for (let x = 0; x < size; x++) {
       const p = paint((x + 0.5) / size, v);
       const i = (y * size + x) * 4;
-      c[i] = p.r;
-      c[i + 1] = p.g;
-      c[i + 2] = p.b;
-      c[i + 3] = 255;
-      h[i] = p.h;
-      h[i + 1] = p.h;
-      h[i + 2] = p.h;
-      h[i + 3] = 255;
+      cd[i] = p.r; cd[i + 1] = p.g; cd[i + 2] = p.b; cd[i + 3] = 255;
+      hd[i] = p.h; hd[i + 1] = p.h; hd[i + 2] = p.h; hd[i + 3] = 255;
     }
   }
-  colorCtx.putImageData(colorImage, 0, 0);
-  heightCtx.putImageData(heightImage, 0, 0);
+  cc.putImageData(cimg, 0, 0);
+  hc.putImageData(himg, 0, 0);
   return { color, height };
 }
 
-/** 由 1024 高度图生成 1024 法线图，方向与既有资产一致。 */
 function normalFromHeight(height: HTMLCanvasElement, strength: number): HTMLCanvasElement {
   const size = height.width;
   const src = height.getContext('2d')!.getImageData(0, 0, size, size).data;
   const [canvas, ctx] = makeCanvas(size);
-  const image = ctx.createImageData(size, size);
+  const img = ctx.createImageData(size, size);
   const sample = (x: number, y: number) => {
     const sx = ((x % size) + size) % size;
     const sy = ((y % size) + size) % size;
@@ -339,56 +273,53 @@ function normalFromHeight(height: HTMLCanvasElement, strength: number): HTMLCanv
     for (let x = 0; x < size; x++) {
       const dx = sample(x + 1, y) - sample(x - 1, y);
       const dy = sample(x, y + 1) - sample(x, y - 1);
-      const nx = -dx * strength;
-      const ny = dy * strength;
+      const nx = -dx * strength; const ny = dy * strength;
       const len = Math.hypot(nx, ny, 1);
       const i = (y * size + x) * 4;
-      image.data[i] = (nx / len) * 0.5 * 255 + 127.5;
-      image.data[i + 1] = (ny / len) * 0.5 * 255 + 127.5;
-      image.data[i + 2] = (1 / len) * 0.5 * 255 + 127.5;
-      image.data[i + 3] = 255;
+      img.data[i]     = (nx / len) * 0.5 * 255 + 127.5;
+      img.data[i + 1] = (ny / len) * 0.5 * 255 + 127.5;
+      img.data[i + 2] = (1  / len) * 0.5 * 255 + 127.5;
+      img.data[i + 3] = 255;
     }
   }
-  ctx.putImageData(image, 0, 0);
+  ctx.putImageData(img, 0, 0);
   return canvas;
 }
 
 function buildAtlas() {
-  const [colorCanvas, colorCtx] = makeCanvas(ATLAS);
-  const [heightCanvas, heightCtx] = makeCanvas(AUX);
-  const [rmCanvas, rmCtx] = makeCanvas(AUX);
+  const [colorC, colorX] = makeCanvas(ATLAS);
+  const [heightC, heightX] = makeCanvas(AUX);
+  const [rmC, rmX] = makeCanvas(AUX);
 
   const builders: Record<CellName, () => { color: HTMLCanvasElement; height: HTMLCanvasElement }> = {
-    wood: () => paintCell(CELL.wood.size, woodPaint(SEED + 1, [216, 196, 166], [172, 145, 112])),
+    wood:    () => paintCell(CELL.wood.size,    woodPaint(SEED + 1, [216, 196, 166], [172, 145, 112])),
     woodEnd: () => paintCell(CELL.woodEnd.size, woodEndPaint(SEED + 2, [212, 190, 158], [166, 138, 106])),
-    cloth: () => paintCell(CELL.cloth.size, clothPaint(SEED + 3, [150, 146, 137], [108, 104, 97], 170)),
-    scarf: () => paintCell(CELL.scarf.size, clothPaint(SEED + 4, [154, 52, 43], [102, 30, 26], 84)),
-    leather: () => paintCell(CELL.leather.size, leatherPaint(SEED + 5, [116, 86, 60], [76, 52, 36])),
-    canvas: () => paintCell(CELL.canvas.size, canvasPaint(SEED + 6, [124, 110, 90], [86, 74, 58])),
-    metal: () => paintCell(CELL.metal.size, metalPaint(SEED + 7, [134, 129, 120], [86, 82, 76])),
-    glass: () => paintCell(CELL.glass.size, glassPaint(SEED + 8, [50, 70, 56], [22, 32, 25])),
-    rope: () => paintCell(CELL.rope.size, ropePaint(SEED + 9, [192, 168, 126], [140, 114, 78])),
-    dark: () => paintCell(CELL.dark.size, darkPaint(SEED + 10)),
+    cloth:   () => paintCell(CELL.cloth.size,   clothPaint(SEED + 3, [152, 149, 142], [110, 106, 98], 170)),
+    scarf:   () => paintCell(CELL.scarf.size,   clothPaint(SEED + 4, [156, 48, 40], [104, 28, 24], 84)),
+    leather: () => paintCell(CELL.leather.size, leatherPaint(SEED + 5, [118, 86, 60], [78, 52, 36])),
+    canvas:  () => paintCell(CELL.canvas.size,  canvasPaint(SEED + 6, [124, 110, 90], [86, 74, 58])),
+    metal:   () => paintCell(CELL.metal.size,   metalPaint(SEED + 7, [134, 129, 120], [86, 82, 76])),
+    glass:   () => paintCell(CELL.glass.size,   glassPaint(SEED + 8, [50, 70, 56], [22, 32, 25])),
+    rope:    () => paintCell(CELL.rope.size,    ropePaint(SEED + 9, [192, 168, 126], [140, 114, 78])),
+    dark:    () => paintCell(CELL.dark.size,    clothPaint(SEED + 10, [62, 58, 52], [34, 31, 28], 220)),
   };
 
   for (const name of Object.keys(CELL) as CellName[]) {
     const cell = CELL[name];
     const maps = builders[name]();
-    colorCtx.drawImage(maps.color, cell.x, cell.y);
-    heightCtx.drawImage(maps.height, cell.x / 2, cell.y / 2, cell.size / 2, cell.size / 2);
+    colorX.drawImage(maps.color, cell.x, cell.y);
+    heightX.drawImage(maps.height, cell.x / 2, cell.y / 2, cell.size / 2, cell.size / 2);
     const [rough, metal] = CELL_RM[name];
-    rmCtx.fillStyle = `rgb(128, ${Math.round(rough * 255)}, ${Math.round(metal * 255)})`;
-    rmCtx.fillRect(cell.x / 2, cell.y / 2, cell.size / 2, cell.size / 2);
+    rmX.fillStyle = `rgb(128, ${Math.round(rough * 255)}, ${Math.round(metal * 255)})`;
+    rmX.fillRect(cell.x / 2, cell.y / 2, cell.size / 2, cell.size / 2);
   }
 
   return {
-    map: texture(colorCanvas, true),
-    rm: texture(rmCanvas, false),
-    normalMap: texture(normalFromHeight(heightCanvas, 2.2), false),
+    map: texOf(colorC, true),
+    rm: texOf(rmC, false),
+    normalMap: texOf(normalFromHeight(heightC, 2.2), false),
   };
 }
-
-// ---------------------------------------------------------------- material
 
 let cache: { atlas: THREE.MeshStandardMaterial } | null = null;
 
@@ -410,9 +341,9 @@ function materials() {
   return cache;
 }
 
-// ---------------------------------------------------------------- UV
+// (atlas section above)
+// ---------------------------------------------------------------- primitives
 
-/** 图集分格 UV 矩形（留 6px 内缩，防 mip 溢色）。 */
 function uvRect(name: CellName) {
   const cell = CELL[name];
   const pad = 6;
@@ -431,13 +362,8 @@ function mapCell(geo: THREE.BufferGeometry, name: CellName, o: MapOptions = {}):
   if (!uv) return geo;
   const { u0, u1, v0, v1 } = uvRect(name);
   for (let i = 0; i < uv.count; i++) {
-    let u = uv.getX(i);
-    let v = uv.getY(i);
-    if (o.swap) {
-      const t = u;
-      u = v;
-      v = t;
-    }
+    let u = uv.getX(i); let v = uv.getY(i);
+    if (o.swap) { const t = u; u = v; v = t; }
     if (o.repeat) {
       u = (((u * o.repeat[0]) % 1) + 1) % 1;
       v = (((v * o.repeat[1]) % 1) + 1) % 1;
@@ -448,17 +374,7 @@ function mapCell(geo: THREE.BufferGeometry, name: CellName, o: MapOptions = {}):
   return geo;
 }
 
-// ---------------------------------------------------------------- primitives
-
-function place(
-  geo: THREE.BufferGeometry,
-  x = 0,
-  y = 0,
-  z = 0,
-  rx = 0,
-  ry = 0,
-  rz = 0,
-): THREE.BufferGeometry {
+function place(geo: THREE.BufferGeometry, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0): THREE.BufferGeometry {
   if (rx) geo.rotateX(rx);
   if (ry) geo.rotateY(ry);
   if (rz) geo.rotateZ(rz);
@@ -466,46 +382,21 @@ function place(
   return geo;
 }
 
-function box(
-  w: number,
-  h: number,
-  d: number,
-  cell: CellName,
-  x = 0,
-  y = 0,
-  z = 0,
-  rx = 0,
-  ry = 0,
-  rz = 0,
-): THREE.BufferGeometry {
+function box(w: number, h: number, d: number, cell: CellName, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0): THREE.BufferGeometry {
   const geo = new THREE.BoxGeometry(w, h, d);
   mapCell(geo, cell);
   return place(geo, x, y, z, rx, ry, rz);
 }
 
-/** 绕 Y 轴回转（车削件）：profile 为 [半径, 高度]，v 沿长轴。 */
-function lathe(
-  profile: Array<readonly [number, number]>,
-  cell: CellName,
-  segments = 20,
-  swap = false,
-): THREE.BufferGeometry {
+function lathe(profile: Array<readonly [number, number]>, cell: CellName, segments = 20, swap = false): THREE.BufferGeometry {
   const pts = profile.map(([r, y]) => new THREE.Vector2(Math.max(r, 0.0002), y));
   const geo = new THREE.LatheGeometry(pts, segments);
   mapCell(geo, cell, { swap });
   return geo;
 }
 
-/**
- * 绕 Z 轴回转、UV 采用平面投影（端面年轮用）。
- * profile 为 [半径, z]，半径必须单调递增；radius 为平面 UV 的归一化半径。
- */
-function revolvePlanar(
-  profile: Array<readonly [number, number]>,
-  cell: CellName,
-  radius: number,
-  segments = 64,
-): THREE.BufferGeometry {
+/** 绕 Z 轴回转、平面 UV（端面年轮）。profile 半径必须单调递增。 */
+function revolvePlanar(profile: Array<readonly [number, number]>, cell: CellName, radius: number, segments = 64): THREE.BufferGeometry {
   const cols = segments + 1;
   const pos: number[] = [];
   const uvs: number[] = [];
@@ -513,18 +404,14 @@ function revolvePlanar(
   for (const [r, z] of profile) {
     for (let j = 0; j < cols; j++) {
       const a = (j / segments) * TAU;
-      const x = Math.cos(a) * r;
-      const y = Math.sin(a) * r;
+      const x = Math.cos(a) * r; const y = Math.sin(a) * r;
       pos.push(x, y, z);
       uvs.push(0.5 + x / (2 * radius), 0.5 + y / (2 * radius));
     }
   }
   for (let i = 0; i < profile.length - 1; i++) {
     for (let j = 0; j < segments; j++) {
-      const a = i * cols + j;
-      const b = a + 1;
-      const c = a + cols;
-      const d = c + 1;
+      const a = i * cols + j; const b = a + 1; const c = a + cols; const d = c + 1;
       idx.push(a, c, b, b, c, d);
     }
   }
@@ -533,7 +420,6 @@ function revolvePlanar(
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   geo.setIndex(idx);
   geo.computeVertexNormals();
-  // 中心收缩点会得到零法线，按端面朝向补齐
   const normal = geo.getAttribute('normal') as THREE.BufferAttribute;
   const dir = profile[profile.length - 1][1] >= profile[0][1] ? -1 : 1;
   for (let i = 0; i < normal.count; i++) {
@@ -547,9 +433,9 @@ function revolvePlanar(
 }
 
 type LoftRow = { y: number; rx: number; rz: number; n?: number; z?: number };
-type LoftOptions = { radial?: number; fold?: number; tears?: boolean; cell?: CellName };
+type LoftOptions = { radial?: number; fold?: number; cell?: CellName };
 
-/** 沿 Y 轴放样超椭圆截面（衣物、背包）。 */
+/** 沿 Y 轴放样超椭圆截面。无破边。 */
 function loftY(rows: LoftRow[], o: LoftOptions = {}): THREE.BufferGeometry {
   const radial = o.radial ?? 48;
   const fold = o.fold ?? 0;
@@ -561,23 +447,12 @@ function loftY(rows: LoftRow[], o: LoftOptions = {}): THREE.BufferGeometry {
   const idx: number[] = [];
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
-    const last = i === rows.length - 1;
     for (let j = 0; j < cols; j++) {
       const a = (j / radial) * TAU;
-      const cx = Math.cos(a);
-      const sz = Math.sin(a);
+      const cx = Math.cos(a); const sz = Math.sin(a);
       const n = row.n ?? 2.2;
       const sx = Math.sign(cx) * Math.pow(Math.abs(cx), 2 / n);
       const szn = Math.sign(sz) * Math.pow(Math.abs(sz), 2 / n);
-      let y = row.y;
-      if (last && o.tears) {
-        y += (fbm(noise, a * 2.4, 3.1, 2) - 0.5) * 0.055;
-        for (let k = 0; k < 5; k++) {
-          const ta = k * 1.31 + 0.4;
-          const d = Math.abs(Math.atan2(Math.sin(a - ta), Math.cos(a - ta)));
-          if (d < 0.13) y -= (1 - d / 0.13) * (0.03 + 0.015 * (k % 2));
-        }
-      }
       let wobble = 0;
       if (fold > 0) {
         wobble = fold * (fbm(noise, cx * 2.3 + 5, sz * 2.3 + row.y * 5.5, 2) - 0.5) * 2;
@@ -585,16 +460,13 @@ function loftY(rows: LoftRow[], o: LoftOptions = {}): THREE.BufferGeometry {
       }
       const rx = Math.max(0.004, row.rx + wobble);
       const rz = Math.max(0.004, row.rz + wobble * 0.65);
-      pos.push(sx * rx, y, szn * rz + (row.z ?? 0));
+      pos.push(sx * rx, row.y, szn * rz + (row.z ?? 0));
       uvs.push(j / radial, i / (rows.length - 1));
     }
   }
   for (let i = 0; i < rows.length - 1; i++) {
     for (let j = 0; j < radial; j++) {
-      const a = i * cols + j;
-      const b = a + 1;
-      const c = a + cols;
-      const d = c + 1;
+      const a = i * cols + j; const b = a + 1; const c = a + cols; const d = c + 1;
       idx.push(a, c, b, b, c, d);
     }
   }
@@ -606,14 +478,8 @@ function loftY(rows: LoftRow[], o: LoftOptions = {}): THREE.BufferGeometry {
   return mapCell(geo, cell);
 }
 
-/** 沿 X 轴放样圆管（袖筒），最后一圈可做破边。 */
-function loftX(
-  rows: Array<{ x: number; r: number; ragged?: number }>,
-  cell: CellName,
-  radial = 28,
-  seed = SEED + 33,
-): THREE.BufferGeometry {
-  const noise = makeNoise(seed);
+/** 沿 X 轴放样圆管（袖筒）。 */
+function loftX(rows: Array<{ x: number; r: number }>, cell: CellName, radial = 28): THREE.BufferGeometry {
   const cols = radial + 1;
   const pos: number[] = [];
   const uvs: number[] = [];
@@ -622,18 +488,13 @@ function loftX(
     const row = rows[i];
     for (let j = 0; j < cols; j++) {
       const a = (j / radial) * TAU;
-      let x = row.x;
-      if (row.ragged) x += (fbm(noise, a * 3.1, i * 2.2, 2) - 0.5) * row.ragged;
-      pos.push(x, Math.cos(a) * row.r, Math.sin(a) * row.r);
+      pos.push(row.x, Math.cos(a) * row.r, Math.sin(a) * row.r);
       uvs.push(i / (rows.length - 1), j / radial);
     }
   }
   for (let i = 0; i < rows.length - 1; i++) {
     for (let j = 0; j < radial; j++) {
-      const a = i * cols + j;
-      const b = a + 1;
-      const c = a + cols;
-      const d = c + 1;
+      const a = i * cols + j; const b = a + 1; const c = a + cols; const d = c + 1;
       idx.push(a, c, b, b, c, d);
     }
   }
@@ -647,12 +508,8 @@ function loftX(
 
 type SweepOptions = { radial?: number; closed?: boolean; cell?: CellName };
 
-/** 沿三维路径扫掠椭圆截面（围巾、皮带、背带、卷须）。 */
-function sweep(
-  points: THREE.Vector3[],
-  radius: (t: number) => readonly [number, number],
-  o: SweepOptions = {},
-): THREE.BufferGeometry {
+/** 沿三维路径扫掠椭圆截面。 */
+function sweep(points: THREE.Vector3[], radius: (t: number) => readonly [number, number], o: SweepOptions = {}): THREE.BufferGeometry {
   const radial = o.radial ?? 10;
   const closed = o.closed ?? false;
   const cell = o.cell ?? 'leather';
@@ -669,16 +526,14 @@ function sweep(
     const prev = points[closed ? (i - 1 + points.length) % points.length : Math.max(0, i - 1)];
     const next = points[closed ? (i + 1) % points.length : Math.min(points.length - 1, i + 1)];
     tangent.subVectors(next, prev).normalize();
-    if (Math.abs(tangent.y) > 0.92) ref.set(0, 0, 1);
-    else ref.set(0, 1, 0);
+    if (Math.abs(tangent.y) > 0.92) ref.set(0, 0, 1); else ref.set(0, 1, 0);
     side.crossVectors(ref, tangent).normalize();
     up.crossVectors(tangent, side).normalize();
     const t = closed ? i / points.length : i / (points.length - 1);
     const [rx, rz] = radius(t);
     for (let j = 0; j < cols; j++) {
       const a = (j / radial) * TAU;
-      const c = Math.cos(a) * rx;
-      const s = Math.sin(a) * rz;
+      const c = Math.cos(a) * rx; const s = Math.sin(a) * rz;
       pos.push(p.x + side.x * c + up.x * s, p.y + side.y * c + up.y * s, p.z + side.z * c + up.z * s);
       uvs.push(j / radial, t);
     }
@@ -687,10 +542,7 @@ function sweep(
   for (let i = 0; i < segs; i++) {
     const i2 = (i + 1) % points.length;
     for (let j = 0; j < radial; j++) {
-      const a = i * cols + j;
-      const b = a + 1;
-      const c = i2 * cols + j;
-      const d = c + 1;
+      const a = i * cols + j; const b = a + 1; const c = i2 * cols + j; const d = c + 1;
       idx.push(a, c, b, b, c, d);
     }
   }
@@ -706,21 +558,13 @@ function merged(list: THREE.BufferGeometry[]): THREE.BufferGeometry {
   return mergeGeometries(list, false)!;
 }
 
-// ---------------------------------------------------------------- wooden joints
-
-function ball(x: number, y: number, z: number, r: number, cell: CellName = 'wood', seg = 18): THREE.BufferGeometry {
-  const geo = new THREE.SphereGeometry(r, seg, Math.max(8, Math.round(seg * 0.7)));
+function ball(x: number, y: number, z: number, r: number, cell: CellName = 'wood', seg = 12): THREE.BufferGeometry {
+  const geo = new THREE.SphereGeometry(r, seg, Math.max(6, Math.round(seg * 0.6)));
   mapCell(geo, cell);
   return place(geo, x, y, z);
 }
 
-function rod(
-  a: THREE.Vector3,
-  b: THREE.Vector3,
-  r: number,
-  cell: CellName = 'wood',
-  segments = 8,
-): THREE.BufferGeometry {
+function rod(a: THREE.Vector3, b: THREE.Vector3, r: number, cell: CellName = 'wood', segments = 6): THREE.BufferGeometry {
   const dir = new THREE.Vector3().subVectors(b, a);
   const len = dir.length();
   const geo = new THREE.CylinderGeometry(r, r, len, segments, 1, false);
@@ -730,27 +574,22 @@ function rod(
   return geo;
 }
 
-/** 带一道赤道凹槽的木球关节。 */
+/** 带赤道凹槽的木球关节。 */
 function jointBallProfile(r: number): Array<readonly [number, number]> {
   return [
     [0.0002, -r],
-    [0.22 * r, -0.93 * r],
-    [0.5 * r, -0.86 * r],
-    [0.82 * r, -0.56 * r],
+    [0.5 * r,  -0.86 * r],
     [0.96 * r, -0.2 * r],
-    [r, -0.06 * r],
-    [0.9 * r, 0],
-    [0.94 * r, 0.05 * r],
-    [r, 0.09 * r],
-    [0.95 * r, 0.3 * r],
-    [0.8 * r, 0.58 * r],
-    [0.48 * r, 0.86 * r],
-    [0.2 * r, 0.94 * r],
-    [0.0002, r],
+    [r,        -0.06 * r],
+    [0.9 * r,   0],
+    [r,         0.09 * r],
+    [0.95 * r,  0.3 * r],
+    [0.48 * r,  0.86 * r],
+    [0.0002,    r],
   ];
 }
 
-function jointBall(r: number, segments = 20): THREE.BufferGeometry {
+function jointBall(r: number, segments = 14): THREE.BufferGeometry {
   return lathe(jointBallProfile(r), 'wood', segments);
 }
 
@@ -759,140 +598,141 @@ function mirrorX(geo: THREE.BufferGeometry, sign: number): THREE.BufferGeometry 
   return geo;
 }
 
+// (primitives section above)
 // ---------------------------------------------------------------- head
 
+/** 头盘：半径 0.23（直径 0.46 ≈ 肩宽 1.3 倍），中心 y=1.47，厚度 0.15。 */
 const HEAD = {
-  discRadius: 0.215,
-  discCenterY: 0.215,
-  rimHalf: 0.064,
+  radius: 0.23,
+  centerY: 1.47,
+  halfThick: 0.075,
 } as const;
 
 function headGeometry(): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [];
 
-  // 圆盘侧缘：木纹沿圆周（UV 交换）
+  // 侧缘：木纹沿圆周（UV 交换）
   const rim = lathe(
     [
-      [0.215, -HEAD.rimHalf],
-      [0.2175, -0.045],
-      [0.2188, 0],
-      [0.2175, 0.045],
-      [0.215, HEAD.rimHalf],
+      [HEAD.radius - 0.005, -HEAD.halfThick],
+      [HEAD.radius,         -HEAD.halfThick + 0.018],
+      [HEAD.radius + 0.002,  0],
+      [HEAD.radius,          HEAD.halfThick - 0.018],
+      [HEAD.radius - 0.005,  HEAD.halfThick],
     ],
     'wood',
-    72,
+    36,
     true,
   );
   place(rim, 0, 0, 0, Math.PI / 2, 0, 0);
-  rim.translate(0, HEAD.discCenterY, 0);
+  rim.translate(0, HEAD.centerY, 0);
   parts.push(rim);
 
-  // 正面：中心凸台 + 两道同心刻槽 + 外圈凹槽，平面 UV 让年轮对中
+  // 正面（-Z）：中央凸台 + 一道同心刻槽 + 浅弧边
   const front = revolvePlanar(
     [
-      [0.0, -0.0895],
-      [0.03, -0.089],
-      [0.055, -0.0862],
-      [0.07, -0.0818],
-      [0.08, -0.0755],
-      [0.096, -0.0738],
-      [0.099, -0.0648],
-      [0.104, -0.0648],
-      [0.107, -0.0738],
-      [0.129, -0.0738],
-      [0.132, -0.0648],
-      [0.137, -0.0648],
-      [0.14, -0.0738],
-      [0.158, -0.0738],
-      [0.166, -0.0625],
-      [0.18, -0.0625],
-      [0.188, -0.07],
-      [0.198, -0.0745],
-      [0.21, -0.0725],
-      [0.215, -0.064],
+      [0.0,                  -HEAD.halfThick - 0.022],
+      [0.05,                 -HEAD.halfThick - 0.022],
+      [0.085,                -HEAD.halfThick - 0.020],
+      [0.100,                -HEAD.halfThick - 0.014],
+      [0.110,                -HEAD.halfThick - 0.006],
+      [0.118,                -HEAD.halfThick - 0.006],
+      [0.124,                -HEAD.halfThick - 0.014],
+      [0.150,                -HEAD.halfThick - 0.012],
+      [0.180,                -HEAD.halfThick - 0.008],
+      [0.205,                -HEAD.halfThick - 0.002],
+      [HEAD.radius - 0.005,  -HEAD.halfThick + 0.002],
     ],
     'woodEnd',
-    HEAD.discRadius,
-    72,
+    HEAD.radius,
+    36,
   );
-  front.translate(0, HEAD.discCenterY, 0);
+  front.translate(0, HEAD.centerY, 0);
   parts.push(front);
 
-  // 背面：浅弧面
+  // 背面（+Z）：浅碗形
   const back = revolvePlanar(
     [
-      [0.0, 0.0775],
-      [0.06, 0.0765],
-      [0.12, 0.0745],
-      [0.18, 0.0718],
-      [0.205, 0.069],
-      [0.215, 0.064],
+      [0.0,                  HEAD.halfThick + 0.008],
+      [0.06,                 HEAD.halfThick + 0.008],
+      [0.12,                 HEAD.halfThick + 0.004],
+      [0.18,                 HEAD.halfThick - 0.002],
+      [HEAD.radius - 0.005,  HEAD.halfThick - 0.006],
     ],
     'woodEnd',
-    HEAD.discRadius,
-    64,
+    HEAD.radius,
+    28,
   );
-  back.translate(0, HEAD.discCenterY, 0);
+  back.translate(0, HEAD.centerY, 0);
   parts.push(back);
 
-  // 顶部卷须（comma）
-  const sproutPoints = [
-    new THREE.Vector3(0, 0.4275, 0.012),
-    new THREE.Vector3(0.002, 0.452, 0.006),
-    new THREE.Vector3(0.02, 0.4705, -0.002),
-    new THREE.Vector3(0.046, 0.476, -0.01),
-    new THREE.Vector3(0.062, 0.462, -0.008),
-    new THREE.Vector3(0.058, 0.444, 0.0),
-    new THREE.Vector3(0.044, 0.439, 0.004),
+  // 卷须（comma）：起点在头盘顶部，朝角色左前方（-X 偏 -Z）伸出，末端上翘
+  const topY = HEAD.centerY + HEAD.radius;
+  const sproutPts = [
+    new THREE.Vector3(-0.005, topY + 0.002, -0.005),
+    new THREE.Vector3(-0.022, topY + 0.038, -0.018),
+    new THREE.Vector3(-0.046, topY + 0.072, -0.030),
+    new THREE.Vector3(-0.072, topY + 0.090, -0.040),
+    new THREE.Vector3(-0.092, topY + 0.082, -0.046),
+    new THREE.Vector3(-0.098, topY + 0.058, -0.046),
+    new THREE.Vector3(-0.090, topY + 0.040, -0.040),
   ];
-  const sprout = sweep(sproutPoints, (t) => {
-    const r = 0.0165 * (1 - t) + 0.0035;
-    return [r, r];
-  }, { radial: 10, cell: 'wood' });
+  const sprout = sweep(
+    sproutPts,
+    (t) => {
+      const r = 0.019 * (1 - t) + 0.004;
+      return [r, r];
+    },
+    { radial: 8, cell: 'wood' },
+  );
   parts.push(sprout);
 
-  return merged(parts);
+  // headGeometry 内部按世界坐标写（head_joint 在 y=1.24），导出前平移到关节局部空间
+  return merged(parts).translate(0, -1.240, 0);
 }
 
 // ---------------------------------------------------------------- arms
+// T-pose：肩 → 肘 → 腕 → 指尖均沿 ±X 方向，掌心向下。
+// 肩距中线 ±0.18，上臂 0.30，前臂 0.25，手 0.17，臂展 1.80。
+
+const ARM = {
+  shoulderX: 0.18,
+  shoulderY: 1.22,
+  upperLen: 0.30,
+  foreLen: 0.25,
+} as const;
 
 function upperArmGeometry(sign: number): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [];
-  parts.push(ball(0, 0, 0, 0.047, 'wood', 18));
+  parts.push(ball(0, 0, 0, 0.046, 'wood', 10));
 
+  // 上臂木杆（沿 +X 延伸 0.30）
   const arm = lathe(
     [
       [0.0002, 0.0],
-      [0.03, 0.004],
-      [0.032, 0.04],
-      [0.03, 0.16],
-      [0.031, 0.2],
-      [0.036, 0.205],
-      [0.036, 0.214],
-      [0.03, 0.219],
-      [0.03, 0.26],
-      [0.034, 0.264],
-      [0.034, 0.272],
-      [0.028, 0.277],
-      [0.0002, 0.302],
+      [0.032,  0.010],
+      [0.030,  0.140],
+      [0.034,  0.240],
+      [0.034,  0.258],
+      [0.030,  0.272],
+      [0.0002, ARM.upperLen],
     ],
     'wood',
-    16,
+    10,
   );
   place(arm, 0, 0, 0, 0, 0, -Math.PI / 2);
   parts.push(arm);
 
-  // 破边短袖
+  // 灰布短袖（覆盖肩到上臂中后段），平口无破边
   const sleeve = loftX(
     [
-      { x: 0.072, r: 0.058 },
-      { x: 0.12, r: 0.064 },
-      { x: 0.17, r: 0.069 },
-      { x: 0.215, r: 0.072 },
-      { x: 0.246, r: 0.071, ragged: 0.018 },
+      { x: 0.060, r: 0.060 },
+      { x: 0.140, r: 0.068 },
+      { x: 0.220, r: 0.074 },
+      { x: 0.280, r: 0.072 },
     ],
     'cloth',
-    28,
+    18,
   );
   parts.push(sleeve);
 
@@ -901,27 +741,22 @@ function upperArmGeometry(sign: number): THREE.BufferGeometry {
 
 function forearmGeometry(sign: number): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [];
-  const elbow = jointBall(0.043, 22);
+  const elbow = jointBall(0.040, 12);
   place(elbow, 0, 0, 0, 0, 0, -Math.PI / 2);
   parts.push(elbow);
 
   const fore = lathe(
     [
-      [0.0002, 0.03],
-      [0.026, 0.034],
-      [0.03, 0.05],
-      [0.028, 0.16],
-      [0.03, 0.19],
-      [0.034, 0.194],
-      [0.034, 0.202],
-      [0.027, 0.206],
-      [0.027, 0.232],
-      [0.031, 0.236],
-      [0.031, 0.243],
-      [0.024, 0.247],
+      [0.0002, 0.020],
+      [0.030,  0.034],
+      [0.028,  0.130],
+      [0.034,  0.220],
+      [0.034,  0.232],
+      [0.027,  0.240],
+      [0.0002, ARM.foreLen],
     ],
     'wood',
-    16,
+    10,
   );
   place(fore, 0, 0, 0, 0, 0, -Math.PI / 2);
   parts.push(fore);
@@ -931,130 +766,119 @@ function forearmGeometry(sign: number): THREE.BufferGeometry {
 
 function handGeometry(sign: number): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [];
-  parts.push(ball(0, 0, 0, 0.029, 'wood', 16));
-  parts.push(box(0.08, 0.068, 0.027, 'wood', sign * 0.058, 0, 0));
-  parts.push(box(0.012, 0.068, 0.028, 'wood', sign * 0.092, 0, 0));
+  parts.push(ball(0, 0, 0, 0.026, 'wood', 8));
 
+  // 手掌：扁盒，掌心向下
+  parts.push(box(0.075, 0.026, 0.080, 'wood', sign * 0.055, 0, 0));
+
+  // 四指：每指 2 节（木偶指节），T-pose 指尖齐平
   const fingers = [
-    { y: 0.0255, len: 0.064 },
-    { y: 0.0085, len: 0.074 },
-    { y: -0.0085, len: 0.07 },
-    { y: -0.0255, len: 0.056 },
+    { z: 0.028, len: 0.072 },
+    { z: 0.009, len: 0.080 },
+    { z: -0.009, len: 0.078 },
+    { z: -0.028, len: 0.062 },
   ];
   for (const f of fingers) {
-    let x = sign * 0.094;
-    const seg = f.len / 3;
-    for (let s = 0; s < 3; s++) {
+    let x = sign * 0.085;
+    const seg = f.len / 2;
+    for (let s = 0; s < 2; s++) {
       const nx = x + sign * seg;
-      parts.push(rod(new THREE.Vector3(x, f.y, 0), new THREE.Vector3(nx, f.y, 0), 0.0074, 'wood', 8));
-      parts.push(ball(nx, f.y, 0, 0.0087, 'wood', 10));
+      parts.push(rod(new THREE.Vector3(x, 0, f.z), new THREE.Vector3(nx, 0, f.z), 0.007, 'wood', 5));
+      parts.push(ball(nx, 0, f.z, 0.008, 'wood', 6));
       x = nx;
     }
   }
 
-  // 拇指：两节，掌心朝 -Z 时向上外张
-  const t0 = new THREE.Vector3(sign * 0.036, 0.034, -0.002);
-  const t1 = new THREE.Vector3(sign * 0.052, 0.062, -0.004);
-  const t2 = new THREE.Vector3(sign * 0.06, 0.086, -0.006);
-  parts.push(rod(t0, t1, 0.009, 'wood', 8));
-  parts.push(ball(t1.x, t1.y, t1.z, 0.0102, 'wood', 10));
-  parts.push(rod(t1, t2, 0.0082, 'wood', 8));
-  parts.push(ball(t2.x, t2.y, t2.z, 0.0088, 'wood', 10));
+  // 拇指（2 节，前侧 -Z 方向伸出）
+  const t0 = new THREE.Vector3(sign * 0.038, 0.0, -0.032);
+  const t1 = new THREE.Vector3(sign * 0.060, 0.0, -0.062);
+  const t2 = new THREE.Vector3(sign * 0.078, 0.0, -0.088);
+  parts.push(rod(t0, t1, 0.0085, 'wood', 5));
+  parts.push(ball(t1.x, t1.y, t1.z, 0.0098, 'wood', 6));
+  parts.push(rod(t1, t2, 0.0078, 'wood', 5));
+  parts.push(ball(t2.x, t2.y, t2.z, 0.0085, 'wood', 6));
 
   return merged(parts);
 }
 
 // ---------------------------------------------------------------- legs
+// 髋 y=0.90 / 膝 y=0.46 / 踝 y=0.08 / 脚底 y=0
 
 function thighGeometry(): THREE.BufferGeometry {
-  // 髋部木球直接并进大腿：小腿枢轴在下方，髋球只在造型上出现
   return lathe(
     [
-      [0.0002, -0.552],
-      [0.025, -0.548],
-      [0.033, -0.536],
-      [0.035, -0.45],
-      [0.033, -0.2],
-      [0.033, -0.06],
-      [0.037, -0.045],
-      [0.048, -0.028],
-      [0.052, -0.008],
-      [0.05, 0.006],
-      [0.046, 0.018],
-      [0.032, 0.028],
-      [0.0002, 0.034],
+      [0.0002, -0.442],
+      [0.030,  -0.432],
+      [0.032,  -0.400],
+      [0.032,  -0.060],
+      [0.048,  -0.012],
+      [0.050,   0.004],
+      [0.030,   0.026],
+      [0.0002,  0.030],
     ],
     'wood',
-    18,
+    12,
   );
 }
 
 function shinGeometry(): THREE.BufferGeometry {
   return lathe(
     [
-      [0.0002, -0.192],
-      [0.024, -0.188],
-      [0.03, -0.178],
-      [0.032, -0.168],
-      [0.03, -0.05],
-      [0.033, -0.03],
-      [0.045, -0.012],
-      [0.048, 0.002],
-      [0.045, 0.016],
-      [0.03, 0.028],
-      [0.0002, 0.034],
+      [0.0002, -0.382],
+      [0.028,  -0.372],
+      [0.030,  -0.352],
+      [0.030,  -0.060],
+      [0.044,  -0.008],
+      [0.046,   0.006],
+      [0.028,   0.026],
+      [0.0002,  0.030],
     ],
     'wood',
-    18,
+    12,
   );
 }
 
 function footGeometry(sign: number): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [];
-  parts.push(ball(0, 0, 0, 0.033, 'wood', 16));
-  parts.push(box(0.072, 0.055, 0.062, 'wood', 0, -0.062, 0.034));
-  parts.push(box(0.082, 0.055, 0.12, 'wood', 0, -0.066, -0.04));
-  parts.push(box(0.088, 0.042, 0.056, 'wood', 0, -0.072, -0.114));
-  parts.push(box(0.098, 0.026, 0.235, 'wood', 0, -0.087, -0.045));
+  parts.push(ball(0, 0, 0, 0.030, 'wood', 10));
+  // 木鞋：前掌 + 后跟 + 鞋底
+  parts.push(box(0.080, 0.050, 0.10, 'wood', 0, -0.042, -0.030));
+  parts.push(box(0.072, 0.050, 0.065, 'wood', 0, -0.042, 0.045));
+  parts.push(box(0.092, 0.022, 0.220, 'wood', 0, -0.068, 0.0));
 
-  const toes = [
-    { x: -0.033, len: 0.03 },
-    { x: -0.017, len: 0.034 },
-    { x: 0.0, len: 0.036 },
-    { x: 0.017, len: 0.033 },
-    { x: 0.033, len: 0.027 },
-  ];
-  for (const toe of toes) {
-    parts.push(box(0.0145, 0.024, toe.len, 'wood', toe.x, -0.071, -0.155 - toe.len * 0.35));
+  // 脚趾（5 颗小方块）
+  const toes = [-0.030, -0.015, 0.0, 0.015, 0.030];
+  for (const tx of toes) {
+    parts.push(box(0.013, 0.020, 0.026, 'wood', tx, -0.040, -0.088));
   }
 
-  // 脚背皮带 + 踝箍
-  const strap = sweep(
-    [
-      new THREE.Vector3(sign * -0.052, -0.048, -0.026),
-      new THREE.Vector3(sign * -0.02, -0.028, -0.03),
-      new THREE.Vector3(0, -0.02, -0.032),
-      new THREE.Vector3(sign * 0.02, -0.028, -0.03),
-      new THREE.Vector3(sign * 0.052, -0.048, -0.026),
-    ],
-    () => [0.014, 0.0055],
-    { radial: 8, cell: 'leather' },
+  // 脚背皮带
+  parts.push(
+    sweep(
+      [
+        new THREE.Vector3(sign * -0.046, -0.020, -0.020),
+        new THREE.Vector3(sign * -0.018, -0.012, -0.024),
+        new THREE.Vector3(0,            -0.008, -0.026),
+        new THREE.Vector3(sign * 0.018, -0.012, -0.024),
+        new THREE.Vector3(sign * 0.046, -0.020, -0.020),
+      ],
+      () => [0.013, 0.005],
+      { radial: 8, cell: 'leather' },
+    ),
   );
-  parts.push(strap);
-
-  const anklet = new THREE.TorusGeometry(0.034, 0.0042, 6, 22);
+  // 踝箍
+  const anklet = new THREE.TorusGeometry(0.032, 0.004, 5, 14);
   mapCell(anklet, 'leather');
-  place(anklet, 0, -0.006, 0, Math.PI / 2, 0, 0);
+  place(anklet, 0, -0.002, 0, Math.PI / 2, 0, 0);
   parts.push(anklet);
 
   return merged(parts);
 }
 
-// ---------------------------------------------------------------- 躯干 / 服装 / 背包
+// ---------------------------------------------------------------- body（躯干 / 服装 / 背包）
 
 function buckle(x: number, y: number, z: number, w = 0.034, h = 0.026): THREE.BufferGeometry {
-  const t = 0.0045;
-  const d = 0.005;
+  const t = 0.0045; const d = 0.005;
   return merged([
     box(w, t, d, 'metal', x, y + h / 2, z),
     box(w, t, d, 'metal', x, y - h / 2, z),
@@ -1067,147 +891,133 @@ function buckle(x: number, y: number, z: number, w = 0.034, h = 0.026): THREE.Bu
 function bodyGeometry(): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [];
 
-  // 车削木脖子（下端藏在衣领内，上端插入圆盘）
+  // 木脖子
   parts.push(
     lathe(
       [
-        [0.024, 1.232],
-        [0.028, 1.244],
-        [0.034, 1.252],
-        [0.03, 1.26],
-        [0.03, 1.266],
-        [0.035, 1.27],
-        [0.028, 1.276],
-        [0.029, 1.3],
-        [0.032, 1.312],
-        [0.03, 1.325],
-        [0.026, 1.336],
+        [0.024, 1.175],
+        [0.034, 1.200],
+        [0.030, 1.216],
+        [0.030, 1.245],
       ],
       'wood',
-      20,
+      12,
     ),
   );
 
-  // 灰布长衫：肩部收口 → 束腰 → 破边下摆
+  // 灰布长衫：肩 → 束腰 → 直筒下摆（平直，无破边）
+  // 下摆 y=0.50，膝盖 0.46 露出下方小腿
   const tunic = loftY(
     [
-      { y: 1.246, rx: 0.055, rz: 0.05 },
-      { y: 1.238, rx: 0.1, rz: 0.078 },
-      { y: 1.226, rx: 0.145, rz: 0.096 },
-      { y: 1.205, rx: 0.168, rz: 0.106 },
-      { y: 1.16, rx: 0.178, rz: 0.112 },
-      { y: 1.05, rx: 0.172, rz: 0.108 },
-      { y: 0.95, rx: 0.162, rz: 0.1 },
-      { y: 0.88, rx: 0.15, rz: 0.094 },
-      { y: 0.82, rx: 0.155, rz: 0.098 },
-      { y: 0.72, rx: 0.172, rz: 0.108 },
-      { y: 0.62, rx: 0.182, rz: 0.115 },
-      { y: 0.52, rx: 0.186, rz: 0.118 },
-      { y: 0.435, rx: 0.188, rz: 0.12 },
+      { y: 1.218, rx: 0.060, rz: 0.052 },
+      { y: 1.200, rx: 0.110, rz: 0.082 },
+      { y: 1.160, rx: 0.170, rz: 0.108 },
+      { y: 1.080, rx: 0.176, rz: 0.112 },
+      { y: 0.960, rx: 0.162, rz: 0.102 },
+      { y: 0.880, rx: 0.150, rz: 0.094 },
+      { y: 0.760, rx: 0.164, rz: 0.104 },
+      { y: 0.620, rx: 0.180, rz: 0.114 },
+      { y: 0.500, rx: 0.188, rz: 0.120 },
     ],
-    { radial: 56, fold: 0.0065, tears: true },
+    { radial: 28, fold: 0.005, cell: 'cloth' },
   );
   parts.push(tunic);
 
-  // 双圈皮带
-  for (const y of [0.866, 0.848]) {
-    const band = new THREE.TorusGeometry(0.158, 0.011, 8, 64);
-    mapCell(band, 'leather');
-    band.scale(1, 0.62, 1);
-    place(band, 0, y, 0, Math.PI / 2, 0, 0);
-    parts.push(band);
-  }
+  // 单圈腰带
+  const belt = new THREE.TorusGeometry(0.158, 0.014, 5, 32);
+  mapCell(belt, 'leather');
+  belt.scale(1, 0.62, 1);
+  place(belt, 0, 0.880, 0, Math.PI / 2, 0, 0);
+  parts.push(belt);
 
-  // 皮带结 + 垂尾 + 金属尾片（角色左侧）
-  parts.push(box(0.052, 0.038, 0.022, 'leather', -0.104, 0.856, -0.092, 0, 0, 0.18));
-  parts.push(box(0.022, 0.072, 0.018, 'leather', -0.126, 0.818, -0.088, 0, 0, 0.3));
+  // 腰带结 + 垂尾 + 金属尾片（角色左侧）
+  parts.push(box(0.052, 0.038, 0.022, 'leather', -0.104, 0.872, -0.092, 0, 0, 0.18));
+  parts.push(box(0.022, 0.072, 0.018, 'leather', -0.126, 0.834, -0.088, 0, 0, 0.3));
   const beltTail = sweep(
     [
-      new THREE.Vector3(-0.118, 0.845, -0.098),
-      new THREE.Vector3(-0.128, 0.78, -0.112),
-      new THREE.Vector3(-0.14, 0.7, -0.117),
-      new THREE.Vector3(-0.147, 0.635, -0.112),
+      new THREE.Vector3(-0.118, 0.862, -0.098),
+      new THREE.Vector3(-0.128, 0.795, -0.112),
+      new THREE.Vector3(-0.140, 0.712, -0.117),
+      new THREE.Vector3(-0.147, 0.640, -0.112),
     ],
     (t) => [0.026 + t * 0.005, 0.006],
     { radial: 8, cell: 'leather' },
   );
   parts.push(beltTail);
-  parts.push(box(0.032, 0.02, 0.012, 'metal', -0.148, 0.622, -0.112));
+  parts.push(box(0.032, 0.020, 0.012, 'metal', -0.148, 0.628, -0.112));
 
-  // 红围巾：颈圈 + 肩部披巾 + 左胸垂尾
+  // 红围巾：颈圈（绕脖一圈）
   const collarPts: THREE.Vector3[] = [];
-  for (let i = 0; i < 26; i++) {
-    const a = (i / 26) * TAU;
-    collarPts.push(new THREE.Vector3(Math.cos(a) * 0.108, 1.205 + Math.sin(a * 3) * 0.006, Math.sin(a) * 0.09));
+  for (let i = 0; i < 18; i++) {
+    const a = (i / 18) * TAU;
+    collarPts.push(new THREE.Vector3(Math.cos(a) * 0.100, 1.192 + Math.sin(a * 3) * 0.006, Math.sin(a) * 0.088));
   }
   parts.push(
-    sweep(collarPts, (t) => [0.032 + Math.sin(t * TAU * 2) * 0.004, 0.028], {
-      radial: 12,
-      closed: true,
-      cell: 'scarf',
+    sweep(collarPts, () => [0.034, 0.030], {
+      radial: 8, closed: true, cell: 'scarf',
     }),
   );
 
-  const cape = loftY(
+  // 左肩前披片：从左颈肩披到左胸前（背部不做披片，三视图背面无红）
+  const shoulderDrape = sweep(
     [
-      { y: 1.242, rx: 0.06, rz: 0.052 },
-      { y: 1.232, rx: 0.104, rz: 0.082 },
-      { y: 1.215, rx: 0.148, rz: 0.108 },
-      { y: 1.18, rx: 0.182, rz: 0.128 },
-      { y: 1.13, rx: 0.198, rz: 0.138 },
-      { y: 1.075, rx: 0.205, rz: 0.142 },
+      new THREE.Vector3(-0.040, 1.218, -0.020),
+      new THREE.Vector3(-0.080, 1.208, -0.058),
+      new THREE.Vector3(-0.110, 1.185, -0.098),
+      new THREE.Vector3(-0.132, 1.150, -0.122),
+      new THREE.Vector3(-0.142, 1.108, -0.132),
     ],
-    { radial: 56, fold: 0.009, tears: true, cell: 'scarf' },
+    (t) => [0.052 + t * 0.020, 0.007],
+    { radial: 8, cell: 'scarf' },
   );
-  parts.push(cape);
+  parts.push(shoulderDrape);
 
+  // 左胸垂尾：从颈前向左胯垂下
   const scarfTail = sweep(
     [
-      new THREE.Vector3(-0.075, 1.115, -0.125),
-      new THREE.Vector3(-0.1, 1.03, -0.148),
-      new THREE.Vector3(-0.122, 0.94, -0.152),
-      new THREE.Vector3(-0.135, 0.855, -0.14),
-      new THREE.Vector3(-0.142, 0.795, -0.128),
-      new THREE.Vector3(-0.145, 0.75, -0.118),
+      new THREE.Vector3(-0.058, 1.170, -0.092),
+      new THREE.Vector3(-0.080, 1.100, -0.118),
+      new THREE.Vector3(-0.102, 1.020, -0.132),
+      new THREE.Vector3(-0.120, 0.940, -0.134),
+      new THREE.Vector3(-0.132, 0.872, -0.124),
+      new THREE.Vector3(-0.136, 0.820, -0.114),
     ],
     (t) => {
-      const half = t < 0.9 ? 0.036 + 0.03 * t : 0.066 - (t - 0.9) * 0.55;
+      const half = t < 0.85 ? 0.038 + t * 0.030 : 0.068 - (t - 0.85) * 0.4;
       return [half, 0.0065];
     },
-    { radial: 10, cell: 'scarf' },
+    { radial: 8, cell: 'scarf' },
   );
   parts.push(scarfTail);
 
-  // 帆布背包本体
+  // ---------------------------------------------------------------- 背包
+  // 主包：背后大方包，y 0.86 ~ 1.20，z 中心 +0.20
   const pack = loftY(
     [
-      { y: 1.198, rx: 0.1, rz: 0.05, n: 2.6, z: 0.185 },
-      { y: 1.188, rx: 0.132, rz: 0.063, n: 2.6, z: 0.185 },
-      { y: 1.16, rx: 0.15, rz: 0.073, n: 2.5, z: 0.185 },
-      { y: 1.1, rx: 0.155, rz: 0.078, n: 2.4, z: 0.185 },
-      { y: 0.95, rx: 0.155, rz: 0.078, n: 2.4, z: 0.185 },
-      { y: 0.88, rx: 0.148, rz: 0.074, n: 2.4, z: 0.185 },
-      { y: 0.85, rx: 0.128, rz: 0.062, n: 2.5, z: 0.185 },
-      { y: 0.82, rx: 0.098, rz: 0.045, n: 2.6, z: 0.185 },
+      { y: 1.200, rx: 0.100, rz: 0.050, n: 2.6, z: 0.200 },
+      { y: 1.190, rx: 0.132, rz: 0.063, n: 2.6, z: 0.200 },
+      { y: 1.160, rx: 0.150, rz: 0.074, n: 2.5, z: 0.200 },
+      { y: 0.960, rx: 0.156, rz: 0.080, n: 2.4, z: 0.200 },
+      { y: 0.900, rx: 0.148, rz: 0.074, n: 2.4, z: 0.200 },
+      { y: 0.860, rx: 0.098, rz: 0.045, n: 2.6, z: 0.200 },
     ],
-    { radial: 48, cell: 'canvas' },
+    { radial: 28, cell: 'canvas' },
   );
   parts.push(pack);
 
-  // 背包顶盖
+  // 顶盖
   parts.push(
     sweep(
       [
-        new THREE.Vector3(0, 1.196, 0.132),
-        new THREE.Vector3(0, 1.222, 0.172),
-        new THREE.Vector3(0, 1.228, 0.215),
-        new THREE.Vector3(0, 1.195, 0.256),
-        new THREE.Vector3(0, 1.13, 0.272),
-        new THREE.Vector3(0, 1.055, 0.27),
-        new THREE.Vector3(0, 1.005, 0.262),
+        new THREE.Vector3(0, 1.198, 0.140),
+        new THREE.Vector3(0, 1.224, 0.180),
+        new THREE.Vector3(0, 1.230, 0.222),
+        new THREE.Vector3(0, 1.198, 0.262),
+        new THREE.Vector3(0, 1.140, 0.278),
+        new THREE.Vector3(0, 1.005, 0.268),
       ],
       (t) => [0.132 + Math.sin(t * Math.PI) * 0.008, 0.007],
-      { radial: 12, cell: 'canvas' },
+      { radial: 10, cell: 'canvas' },
     ),
   );
 
@@ -1216,88 +1026,109 @@ function bodyGeometry(): THREE.BufferGeometry {
     parts.push(
       sweep(
         [
-          new THREE.Vector3(sx * 0.075, 1.2, 0.146),
-          new THREE.Vector3(sx * 0.075, 1.228, 0.196),
-          new THREE.Vector3(sx * 0.075, 1.222, 0.238),
-          new THREE.Vector3(sx * 0.075, 1.15, 0.281),
-          new THREE.Vector3(sx * 0.075, 1.05, 0.289),
-          new THREE.Vector3(sx * 0.075, 0.968, 0.276),
+          new THREE.Vector3(sx * 0.075, 1.200, 0.148),
+          new THREE.Vector3(sx * 0.075, 1.230, 0.198),
+          new THREE.Vector3(sx * 0.075, 1.222, 0.240),
+          new THREE.Vector3(sx * 0.075, 1.150, 0.285),
+          new THREE.Vector3(sx * 0.075, 1.050, 0.293),
+          new THREE.Vector3(sx * 0.075, 0.968, 0.280),
         ],
         () => [0.017, 0.005],
-        { radial: 8, cell: 'leather' },
+        { radial: 6, cell: 'leather' },
       ),
     );
-    parts.push(buckle(sx * 0.075, 1.045, 0.297, 0.032, 0.024));
+    parts.push(buckle(sx * 0.075, 1.045, 0.300, 0.032, 0.024));
   }
 
-  // 铺盖卷 + 麻绳端面 + 两道皮箍
-  const roll = new THREE.CylinderGeometry(0.055, 0.055, 0.33, 24, 1, false);
+  // 铺盖卷：横向（沿 X），直径 0.16，长 0.42，放在背包顶部后方
+  const rollY = 1.245;
+  const rollZ = 0.205;
+  const roll = new THREE.CylinderGeometry(0.078, 0.078, 0.42, 18, 1, false);
   mapCell(roll, 'canvas');
-  place(roll, 0, 1.235, 0.185, 0, 0, Math.PI / 2);
+  place(roll, 0, rollY, rollZ, 0, 0, Math.PI / 2);
   parts.push(roll);
 
+  // 皮箍两道（在卷两端 1/3 处）
   for (const sx of [-1, 1]) {
-    const hoop = new THREE.TorusGeometry(0.058, 0.0055, 6, 24);
+    const hoop = new THREE.TorusGeometry(0.080, 0.006, 4, 14);
     mapCell(hoop, 'leather');
-    place(hoop, sx * 0.09, 1.235, 0.185, 0, Math.PI / 2, 0);
+    place(hoop, sx * 0.13, rollY, rollZ, 0, Math.PI / 2, 0);
     parts.push(hoop);
   }
 
+  // 端面螺旋（帆布卷纹）
   for (const sx of [-1, 1]) {
     const pts: THREE.Vector3[] = [];
-    for (let i = 0; i <= 48; i++) {
-      const t = i / 48;
-      const a = t * TAU * 3.2;
-      const r = 0.007 + t * 0.045;
-      pts.push(new THREE.Vector3(sx * 0.1665, 1.235 + Math.cos(a) * r, 0.185 + Math.sin(a) * r));
+    for (let i = 0; i <= 24; i++) {
+      const t = i / 24;
+      const a = t * TAU * 2.4;
+      const r = 0.008 + t * 0.064;
+      pts.push(new THREE.Vector3(sx * 0.211, rollY + Math.cos(a) * r, rollZ + Math.sin(a) * r));
     }
-    parts.push(sweep(pts, () => [0.005, 0.005], { radial: 6, cell: 'rope' }));
+    parts.push(sweep(pts, () => [0.0055, 0.0055], { radial: 4, cell: 'rope' }));
   }
 
-  // 侧袋 + 搭扣
+  // 背包正面下方两个并排长袋（三视图背面可见）
   for (const sx of [-1, 1]) {
-    parts.push(box(0.05, 0.12, 0.095, 'canvas', sx * 0.168, 0.945, 0.185));
-    parts.push(box(0.054, 0.028, 0.1, 'canvas', sx * 0.168, 1.005, 0.183));
-    parts.push(box(0.012, 0.07, 0.022, 'leather', sx * 0.196, 0.985, 0.226));
-    parts.push(box(0.02, 0.012, 0.014, 'metal', sx * 0.196, 0.958, 0.232));
+    parts.push(box(0.100, 0.110, 0.045, 'canvas', sx * 0.070, 0.930, 0.278));
+    // 袋盖
+    parts.push(box(0.104, 0.030, 0.048, 'canvas', sx * 0.070, 0.985, 0.276));
+    // 袋扣皮条 + 金属扣
+    parts.push(box(0.018, 0.060, 0.010, 'leather', sx * 0.070, 0.960, 0.302));
+    parts.push(buckle(sx * 0.070, 0.932, 0.308, 0.022, 0.018));
   }
 
-  // 水壶（角色右侧）
-  const bottleBody = new THREE.CylinderGeometry(0.024, 0.024, 0.11, 18, 1, false);
-  mapCell(bottleBody, 'glass');
-  parts.push(place(bottleBody, 0.199, 0.965, 0.185));
-  const bottleShoulder = new THREE.CylinderGeometry(0.013, 0.024, 0.03, 18, 1, false);
-  mapCell(bottleShoulder, 'glass');
-  parts.push(place(bottleShoulder, 0.199, 1.035, 0.185));
-  const bottleNeck = new THREE.CylinderGeometry(0.011, 0.011, 0.03, 14, 1, false);
-  mapCell(bottleNeck, 'glass');
-  parts.push(place(bottleNeck, 0.199, 1.065, 0.185));
-  const cork = new THREE.CylinderGeometry(0.0125, 0.0115, 0.018, 14, 1, false);
-  mapCell(cork, 'wood');
-  parts.push(place(cork, 0.199, 1.089, 0.185));
+  // 背包左侧袋（角色左）
+  parts.push(box(0.050, 0.120, 0.095, 'canvas', -0.170, 0.955, 0.200));
+  parts.push(box(0.054, 0.028, 0.100, 'canvas', -0.170, 1.015, 0.198));
+  parts.push(box(0.012, 0.070, 0.022, 'leather', -0.198, 0.995, 0.240));
+  parts.push(box(0.020, 0.012, 0.014, 'metal', -0.198, 0.968, 0.246));
 
-  // 肩带（从包顶绕过肩到胸前）
+  // 水壶（角色右侧，与侧袋对称位置）
+  const bx = 0.192;
+  const by = 0.960;
+  const bz = 0.200;
+  const bottleBody = new THREE.CylinderGeometry(0.026, 0.026, 0.115, 12, 1, false);
+  mapCell(bottleBody, 'glass');
+  parts.push(place(bottleBody, bx, by, bz));
+  const bottleShoulder = new THREE.CylinderGeometry(0.013, 0.026, 0.030, 12, 1, false);
+  mapCell(bottleShoulder, 'glass');
+  parts.push(place(bottleShoulder, bx, by + 0.072, bz));
+  const bottleNeck = new THREE.CylinderGeometry(0.011, 0.011, 0.030, 10, 1, false);
+  mapCell(bottleNeck, 'glass');
+  parts.push(place(bottleNeck, bx, by + 0.102, bz));
+  const cork = new THREE.CylinderGeometry(0.0125, 0.0115, 0.018, 10, 1, false);
+  mapCell(cork, 'wood');
+  parts.push(place(cork, bx, by + 0.126, bz));
+  // 水壶皮套环
+  const bottleHoop = new THREE.TorusGeometry(0.030, 0.004, 5, 12);
+  mapCell(bottleHoop, 'leather');
+  place(bottleHoop, bx, by - 0.020, bz, Math.PI / 2, 0, 0);
+  parts.push(bottleHoop);
+
+  // 肩带（从包顶绕过肩到胸前，皮革）
   for (const sx of [-1, 1]) {
     parts.push(
       sweep(
         [
-          new THREE.Vector3(sx * 0.1, 1.19, 0.155),
-          new THREE.Vector3(sx * 0.115, 1.235, 0.06),
-          new THREE.Vector3(sx * 0.118, 1.225, -0.03),
-          new THREE.Vector3(sx * 0.108, 1.13, -0.108),
-          new THREE.Vector3(sx * 0.1, 1.02, -0.118),
-          new THREE.Vector3(sx * 0.098, 0.94, -0.112),
+          new THREE.Vector3(sx * 0.100, 1.195, 0.170),
+          new THREE.Vector3(sx * 0.118, 1.240, 0.060),
+          new THREE.Vector3(sx * 0.120, 1.228, -0.030),
+          new THREE.Vector3(sx * 0.110, 1.130, -0.110),
+          new THREE.Vector3(sx * 0.102, 1.020, -0.120),
+          new THREE.Vector3(sx * 0.100, 0.940, -0.114),
         ],
         () => [0.018, 0.0055],
-        { radial: 8, cell: 'leather' },
+        { radial: 6, cell: 'leather' },
       ),
     );
-    parts.push(buckle(sx * 0.1, 1.0, -0.125, 0.028, 0.022));
+    parts.push(buckle(sx * 0.102, 1.005, -0.128, 0.028, 0.022));
   }
 
   return merged(parts);
 }
 
+// (parts section above)
 // ---------------------------------------------------------------- assembly
 
 export function createCharComma(): THREE.Group {
@@ -1317,7 +1148,7 @@ export function createCharComma(): THREE.Group {
 
   const head = new THREE.Object3D();
   head.name = 'head_joint';
-  head.position.set(0, 1.315, 0);
+  head.position.set(0, 1.240, 0);
   root.add(head);
   addMesh(head, headGeometry(), 'char_comma_head');
 
@@ -1325,19 +1156,19 @@ export function createCharComma(): THREE.Group {
     const side = sign > 0 ? 'r' : 'l';
     const shoulder = new THREE.Object3D();
     shoulder.name = `shoulder_${side}`;
-    shoulder.position.set(sign * 0.16, 1.2, 0);
+    shoulder.position.set(sign * ARM.shoulderX, ARM.shoulderY, 0);
     root.add(shoulder);
     addMesh(shoulder, upperArmGeometry(sign), `char_comma_upper_arm_${side}`);
 
     const elbow = new THREE.Object3D();
     elbow.name = `elbow_${side}`;
-    elbow.position.set(sign * 0.315, 0, 0);
+    elbow.position.set(sign * ARM.upperLen, 0, 0);
     shoulder.add(elbow);
     addMesh(elbow, forearmGeometry(sign), `char_comma_forearm_${side}`);
 
     const wrist = new THREE.Object3D();
     wrist.name = `wrist_${side}`;
-    wrist.position.set(sign * 0.25, 0, 0);
+    wrist.position.set(sign * ARM.foreLen, 0, 0);
     elbow.add(wrist);
     addMesh(wrist, handGeometry(sign), `char_comma_hand_${side}`);
   }
@@ -1346,22 +1177,23 @@ export function createCharComma(): THREE.Group {
     const side = sign > 0 ? 'r' : 'l';
     const hip = new THREE.Object3D();
     hip.name = `hip_${side}`;
-    hip.position.set(sign * 0.075, 0.845, 0);
+    hip.position.set(sign * 0.080, 0.900, 0);
     root.add(hip);
     addMesh(hip, thighGeometry(), `char_comma_thigh_${side}`);
 
     const knee = new THREE.Object3D();
     knee.name = `knee_${side}`;
-    knee.position.set(0, -0.55, 0);
+    knee.position.set(0, -0.440, 0);
     hip.add(knee);
     addMesh(knee, shinGeometry(), `char_comma_shin_${side}`);
 
     const ankle = new THREE.Object3D();
     ankle.name = `ankle_${side}`;
-    ankle.position.set(0, -0.195, 0);
+    ankle.position.set(0, -0.380, 0);
     knee.add(ankle);
     addMesh(ankle, footGeometry(sign), `char_comma_foot_${side}`);
   }
 
   return root;
 }
+

@@ -112,13 +112,13 @@ export const ASSETS: AssetEntry[] = [
   },
   {
     id: 'char-comma',
-    label: '远方田野角色 comma 原型 v1',
+    label: '远方田野角色 comma v3',
     create: createCharComma,
     yawRange: 180,
     pitchMin: 0,
     pitchMax: 0,
     pitch: 0,
     pitchNode: 'char_comma',
-    note: '总高 1.80 m · 面朝 -Z · 脚底 y=0<br />关节 head / shoulder / elbow / wrist / hip / knee / ankle',
+    note: '总高 1.80 m · 面朝 -Z · 脚底 y=0 · 臂展 1.80 m<br />关节 head / shoulder / elbow / wrist / hip / knee / ankle',
   },
 ];
