@@ -6,8 +6,6 @@ import { createOrnithopter } from '../HarborDefender/ornithopter/src/ornithopter
 import { createBombardier } from '../HarborDefender/bombardier/src/bombardier-model';
 import { createBossIslewrath } from '../HarborDefender/boss_islewrath/src/boss-islewrath-model';
 import { createPirateChief } from '../HarborDefender/pirate_chief/src/pirate-chief-model';
-import { createCharComma } from '../TheFarField/char_comma/src/char-comma-model';
-import { createWoodObject } from '../TheFarField/wood_object/src/wood-object';
 
 /**
  * 公用浏览台的资产注册表。
@@ -110,26 +108,5 @@ export const ASSETS: AssetEntry[] = [
     pitch: 0,
     pitchNode: 'pirate-chief',
     note: '坐垫 y=0 · 面朝 -Z · 0.41 × 0.433 × 0.41 m · 三角帽 / 铁面口罩 / 独眼',
-  },
-  {
-    id: 'char-comma',
-    label: '远方田野角色 comma v3',
-    create: createCharComma,
-    yawRange: 180,
-    pitchMin: 0,
-    pitchMax: 0,
-    pitch: 0,
-    pitchNode: 'char_comma',
-    note: '总高 1.80 m · 面朝 -Z · 脚底 y=0 · 臂展 1.80 m<br />关节 head / shoulder / elbow / wrist / hip / knee / ankle',
-  },
-  {
-    id: 'wood-object',
-    label: '远方田野木件 v1（素模）',
-    create: createWoodObject,
-    yawRange: 180,
-    pitchMin: 0,
-    pitchMax: 0,
-    pitch: 0,
-    note: '正面（平、头顶缺口片在右上）朝 -Z · 总高 0.627 m<br />盘面 0.497 宽 × 0.42 高 × 0.328 厚 · 底柱 ⌀0.094',
   },
 ];
