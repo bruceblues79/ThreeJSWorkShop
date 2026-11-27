@@ -24,6 +24,9 @@ pnpm-debug.log*
 # img2threejs local workflow state
 .img2threejs/
 
+# agent workspace (本地记忆，不入库)
+.workbuddy/
+
 # editor / OS
 .idea/
 .trae/
