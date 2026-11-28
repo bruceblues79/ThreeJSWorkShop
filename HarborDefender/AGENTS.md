@@ -61,7 +61,7 @@ cannon                     Object3D   根节点 = 原型（无父级，clone 后
 - **装配**：每座单位是原型的 `clone(true)`，几何与材质共享；不要对已放置实例的共享材质原地改参数，也不要 dispose 它们的几何/材质。
 - **渲染成本**：合计 1492 tri / 4476 verts，2 个 Mesh = 2 draw call，2 个材质；三座同屏约 4.5k tri / 6 draw call。所有网格挂载时统一打开 `castShadow` / `receiveShadow`。
 - **材质锁定**：`cannon-wood`（roughness 0.7 / metalness 0）与 `cannon-iron`（roughness 0.5 / metalness 1），`vertexColors: true`、基色纯白；颜色全部顶点色烘焙，无贴图，随机由固定种子 20261013 保证确定性。
-- **交付形式**：不导出 GLB、不进 `src/assets.ts` 清单；在 `startBattle` 的加载流程里用 `requestAnimationFrame` 之后构建一次 `createCannon()` 原型，三座与后续重建都从该原型克隆。
+- **交付形式**：不产出 GLB；资产以 `model.ts` 形式由根工程 `viewer/assets.ts` 注册；在 `startBattle` 的加载流程里用 `requestAnimationFrame` 之后构建一次 `createCannon()` 原型，三座与后续重建都从该原型克隆。
 - **风格锁定**：中世纪港口炮——木质双颊车架 + 四个实心木轮 + 前后横梁 + 楔形垫块，铁质车削炮身（炮口环、两道箍环、加厚炮尾、尾部球钮），硬边不圆滑。
 
 ### v2 资产（本仓库重建版，参考 `cannon/IMG_cannon.jpeg`）

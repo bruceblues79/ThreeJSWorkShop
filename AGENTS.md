@@ -3,6 +3,8 @@
 - 根目录是主工程：Vite + TypeScript + three.js（原生），入口 `index.html` + `src/main.ts`。
 - `viewer/`：项目级公用资产浏览台，全部资产共用一套灯光/相机/控制；资产在 `viewer/assets.ts` 注册，
   `npm run viewer:build` 生成自包含单文件 `viewer/preview.html`（可直接发手机预览）。
+  `npm run viewer:build -- <id>` 为单资产构建，只打入选定 `id` 的模型代码；
+  `viewer/preview.html` 是构建产物，已被 `.gitignore` 忽略，不入库。
 - `HarborDefender/`、`TheFarField/`：按目标项目划分的资产子目录，各自带 AGENTS.md，单位统一为米。
 - 常用命令：`npm run dev` 起预览、`npm run build` 类型检查并打包、`npm run preview` 预览产物。
 
