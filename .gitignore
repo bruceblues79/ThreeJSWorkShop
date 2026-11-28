@@ -30,6 +30,9 @@ pnpm-debug.log*
 # 本地验证截图（临时产物）
 .screenshots/
 
+# 发布应用的本地标记文件
+.wbapp_*.genie
+
 # editor / OS
 .idea/
 .trae/
