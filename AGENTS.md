@@ -27,7 +27,7 @@
 | id | 所属项目 | 代码路径 | 导出函数 | 尺寸(m) | tri | draw call | 文档状态 | 交付状态 | 最后变动提交 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | cannon | HarborDefender | [cannon-model.ts](HarborDefender/cannon/src/cannon-model.ts) | `createCannon()` | 0.228 × 0.199 × 0.350 | 1780 | 2 | 完整 | 已交付 | 69fef30 |
-| wall | HarborDefender | [wall-model.ts](HarborDefender/wall/src/wall-model.ts) | `createWall()` | 3.017 × 0.713 × 0.522 | 1546 | 2 | 完整 | 已交付（兄弟项目为准，本仓库落后一版） | 2e51139 |
+| wall | HarborDefender | [wall-model.ts](HarborDefender/wall/src/wall-model.ts) | `createHarborWall(skyReflection?)` | 3.018 × 0.713 × 0.522 | 1546 | 2 | 完整 | 已交付（已回流 v6） | 1b09ab6 |
 | bombardier | HarborDefender | [bombardier-model.ts](HarborDefender/bombardier/src/bombardier-model.ts) | `createBombardier()` | 1.3800 × 0.5887 × 1.3800 | 1356 | 2 | 完整 | 已交付 | e77e9d9 |
 | boss-islewrath | HarborDefender | [boss-islewrath-model.ts](HarborDefender/boss_islewrath/src/boss-islewrath-model.ts) | `createBossIslewrath()` | 1.9260 × 2.2913 × 1.9260 | 5828 | 7 | 完整 | 已交付 | 4d3a77a |
 | ornithopter | HarborDefender | [ornithopter-model.ts](HarborDefender/ornithopter/src/ornithopter-model.ts) | `createOrnithopter()` | 1.4010 × 0.4700 × 0.8422 | 1003 | 2 | 完整 | 已交付 | 33592df |
@@ -39,7 +39,7 @@
   与实测尺寸/tri/draw call，缺材质清单、节点树、朝向约定。
 - 「交付状态」取 2026-11-28 逐件字节核对结果，做法与出处见 [HarborDefender/AGENTS.md](HarborDefender/AGENTS.md) 的「交付与注入（实测）」一节：
   7 件 HarborDefender 资产均已拷入兄弟项目 `src/scene-assets/`，其中 cannon、pirate-ship 与本仓库逐字节相同，
-  bombardier / boss_islewrath / ornithopter / pirate_chief 只差文件头注释，wall 在兄弟项目侧另有一次实质迭代（本仓库未回流）。
+  其余 5 件只差文件头注释；wall 曾在兄弟项目侧领先一版（v6 天空镜面积水），现已回流本仓库（1b09ab6）。
 - 「最后变动提交」取 `git log -1 --format='%h %s' -- <该资产的 model.ts 路径>`。
 
 # 资产交付流程
@@ -48,5 +48,7 @@
   全部记录在 [HarborDefender/AGENTS.md](HarborDefender/AGENTS.md) 的「交付与注入（实测）」一节，本节不重复数字。
 - 摘要：交付是把 `model.ts` 拷成兄弟项目 `src/scene-assets/<映射名>.scene-asset.ts`，由 `battle-setup.ts`
   以 `.js` 后缀 import；兄弟项目全仓 grep `ThreeJSWorkShop` 无命中，即没有任何跨仓库路径、脚本或依赖。
+- 反向（回流）也一样是拷贝，但要顺手补浏览台缺的依赖：wall v6 的积水需要天空 cubemap，而浏览台没有天幕，
+  因此新增了 `viewer/sky-cube.ts`（程序化天空 + `createWallWithPreviewSky()` 包装工厂）。
 
 

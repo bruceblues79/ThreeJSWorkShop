@@ -103,9 +103,12 @@ cannon                     Group
 盒体 3.4 × 0.5 × 0.4 m，放置于 `(0, 0.55, -1.3)`（`battle-setup.ts`），墙顶 y = 0.8、临海面 z = -1.5、
 陆地侧 z = -1.1，无城垛、无护墙。本仓库资产补齐乱石墙身、临海垛口护墙与墙顶碎石，不含炮、基座盘与海面。
 
-- 代码：`HarborDefender/wall/src/wall-model.ts`，`createWall()` 返回 `THREE.Group`。
+- 代码：`HarborDefender/wall/src/wall-model.ts`，`createHarborWall(skyReflection?: THREE.Texture | null)` 返回 `THREE.Group`。
+  浏览台经 `viewer/sky-cube.ts` 的 `createWallWithPreviewSky()` 传入程序化天空 cubemap（浏览台自身无天幕）。
 - 浏览台：`?asset=wall`，资产 id `wall`。
-- 实测包围盒：3.017 × 0.713 × 0.522 m（含战损削角与碎石）；墙身本体 3.006 × 0.500 × 0.524。
+- 实测包围盒：3.018 × 0.713 × 0.522 m（含战损削角与碎石）；墙身本体 3.006 × 0.500 × 0.524。
+  取数：2026-11-28 `npm run viewer:build -- wall` 后 headless Chrome 访问 `?asset=wall&hud=1`，读读数面板。
+  此前文档记 3.017，该数字最后一次写入是提交 f681043（v5 建档），其后 2e51139 改模型时未重测，以本次实测为准。
   原点仍在墙身中心，墙顶局部 y = +0.25（放置 0.55 后世界 0.8）；三个炮位安装盘（半径 0.23）内 90 个顶点 y 全为 0.2500，绝对水平。
 - 墙长按反馈从 3.4 缩到 3.0（原游戏墙太长）；兄弟项目 `WALL_WIDTH = 3.4` 不用改，墙左右各短 0.2 m 仅为视觉变化，
   不影响炮位、停船带、海面与碎块判定。
@@ -124,17 +127,22 @@ cannon                     Group
   `roughnessMap` 与 `metalnessMap` 共用 G=roughness、B=metalness 贴图，基色纯白。
   石墙为 6 × 6 抖动 Voronoi 单元（约 14% 单元并给邻居形成大石），缝宽 8 px 即灰缝，贴图无缝平铺，UV 1.6 次/m；
   颜色贴图叠加低频积垢，竖向流痕只留稀疏几道。无苔藓；法线强度 4.0，石棱明暗更重，砖块更凸。
-  另有 1 个 `wall-puddle` 材质：深色 0x1d2426、roughness 0.05、metalness 0、透明 0.9，无贴图；
+  另有 1 个 `wall-puddle` 材质：v6 起改为 `ShaderMaterial` 的 unlit 天空镜面——顶点用 `mat3(modelMatrix)` 保留世界空间法线，
+  片元 `reflect` 后 `textureCube(uSkyCube, …)` 采样天空，手动 `linearToSRGB` 编码，按掠射角以 `mix(0.6, 1.0, pow(1 - ndv, 2))`
+  调镜面权重，`uOpacity` 0.92；无贴图槽（天空由外部 cubemap 传入），`castShadow = false`（否则会在石面上压出一圈脏影）。
+  v5 及以前是 `MeshStandardMaterial`（0x1d2426 / roughness 0.05 / opacity 0.9）。
   水膜三角面须朝 +Y（绕序反过来会被背面剔除，预览里直接看不见）。
 - 积水：墙顶 +Y 面 3 片 14 边不规则薄水膜（每片 14 tri），左右不对称，局部 y = +0.251（高墙顶 1 mm），
   中心 xz = (0.372, -0.078)、(0.98, -0.15)、(-0.98, -0.155)，尺寸 0.18–0.21 × 0.11–0.12 m；
   已避开炮位安装盘（±0.75/0，半径 0.23）、陆侧墙顶啃口（x = ±0.37 且 z > 0.12）与两端碎石堆。
-- 渲染成本：实测 1546 tri / 2 Mesh = 2 draw call / 2 材质 / 3 张贴图（碎石 120 tri、积水 42 tri）。
+  不传 `skyReflection` 时积水为纯黑薄膜；浏览台传的是 `viewer/sky-cube.ts` 生成的 6 面 64 × 64 程序化天空 cubemap。
+- 渲染成本：实测 1546 tri / 2 Mesh = 2 draw call / 2 材质 / 3 张贴图（碎石 120 tri、积水 42 tri；3 张贴图全在 `wall-stone`，
+  积水采样的是外部 cubemap，不占材质贴图槽）。取数同尺寸一项。
 - 兼容：兄弟项目常量不用改。碎块落水仍按 z < -1.5 判定，最外侧 0.1 m 墙体上的少量碎块会直接落水；
   boss 扫射瞄准 y = 1.05 仍在垛口（1.02）之上。
 - 墙顶必须保持绝对水平：战损只削两端陆侧墙顶与陆侧啃口，三个炮位安装盘半径 0.23 内的墙顶顶点保持 y = +0.25 不变。
-- 交付现状：兄弟项目现行版本（提交 59c001b，v6）已把出口改名 `createHarborWall(skyReflection?)`、把积水换成 unlit 天空镜面，
-  本节描述的是本仓库这一版；两侧差异明细见「交付与注入（实测）」第 2 节。
+- 交付现状：兄弟项目 v6（提交 59c001b）已回流本仓库（提交 1b09ab6），两侧同名文件现在只差头部注释（本仓库按要求删除），
+  几何与材质代码逐字一致；差异明细见「交付与注入（实测）」第 2 节。
 
 ## 海盗轰炸机（bombardier）
 
@@ -470,16 +478,19 @@ pirate-chief              Group     根，局部 (0, 0, 0)
 | ornithopter | 34403 | 34562 | +3 / −1 | 仅文件头注释 | 3d15107 2026-11-19 |
 | boss_islewrath | 31261 | 31340 | +2 / −1 | 仅文件头注释 | 669423a 2026-11-20 |
 | pirate_chief | 21176 | 21255 | +2 / −1 | 仅文件头注释 | 669423a 2026-11-20 |
-| wall | 19498 | 21679 | +63 / −15 | 实质代码差异 | 59c001b 2026-11-22 |
+| wall | 20784 | 21679 | −13 / 0 | 仅缺头部注释（本仓库按要求删除），几何与材质代码逐字一致 | 59c001b 2026-11-22 |
 
 - 注释类差异的固定内容：兄弟项目侧把「对齐兄弟项目 xxx.glb」「兄弟项目 8 rad/s」「保持兄弟项目 barY = 0.479」
   这类本仓库口径改写成兄弟项目自身口径（`PROP 8 rad/s`、`健康条 barY 沿用该高度`、`level-wave-system 硬依赖`），
   并统一加一行「与海盗船、轰炸机一致：loading 阶段在代码中构建，不再固化 GLB」。几何与材质代码零差异。
-- wall 的差异是实质代码，方向是**兄弟项目更新**：`createWall()` → `createHarborWall(skyReflection?: THREE.Texture | null)`；
-  积水材质从 `MeshStandardMaterial`（0x1d2426 / roughness 0.05 / opacity 0.9）改为 unlit 天空镜面 `ShaderMaterial`
-  （采样海面同款天空 cubemap、掠射角更接近镜面、垂直俯视更透、手动线性转 sRGB）；积水 `castShadow = false`。
-  该迭代只存在于兄弟项目（提交 59c001b，v6 stone with mirrored sky puddles，版本 0.1.481），本仓库未回流。
-  本文「城防港城墙」一节描述的是本仓库这一版，两侧不同源。
+- wall 曾在兄弟项目侧独立迭代（提交 59c001b，v6 stone with mirrored sky puddles，版本 0.1.481）：出口改名
+  `createHarborWall(skyReflection?: THREE.Texture | null)`、积水改 unlit 天空镜面 `ShaderMaterial`、积水 `castShadow = false`。
+  **该版本已回流本仓库**（提交 1b09ab6），两侧几何与材质代码逐字一致，只差本仓库被删掉的头部注释。
+- 回流必须同时补齐浏览台的缺失依赖：浏览台没有天幕，`skyReflection` 传 `undefined` 会让积水采样空 sampler 变成纯黑。
+  为此新增 `viewer/sky-cube.ts`（6 面 64 × 64 程序化天空 cubemap，模块级缓存）并导出 `createWallWithPreviewSky()`。
+  必须包一层工厂而不能在 `viewer/assets.ts` 里写内联箭头函数：`viewer/build-viewer.mjs`:58 的注册表解析
+  只接受裸标识符 `create: <name>`，内联箭头会抛 `cannot parse asset entry`。
+- 导出名两侧保持一致（都叫 `createHarborWall`），交付/回流都是纯拷贝，不需要改名适配。
 - 时间关系：兄弟项目 6 件文件 mtime 为 2026/11/20、wall 为 2026/11/23，均不早于本仓库对应资产最后改动日
   （cannon 11/18、pirate-ship 11/18、bombardier 11/19、ornithopter 11/19、boss 11/20、pirate_chief 11/20、wall 11/22）。
 
