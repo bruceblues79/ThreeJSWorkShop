@@ -27,6 +27,9 @@ pnpm-debug.log*
 # agent workspace (本地记忆，不入库)
 .workbuddy/
 
+# 本地验证截图（临时产物）
+.screenshots/
+
 # editor / OS
 .idea/
 .trae/
