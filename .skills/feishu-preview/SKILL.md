@@ -7,6 +7,8 @@ description: Build viewer/preview.html for a registered asset and send it to the
 
 把 `viewer/` 里已注册的资产打成自包含 HTML，并发到用户本人的飞书会话。
 预览页只包含本次要预览的资产，不保留资产切换按钮。
+单件产物 566–578 KB（580,018–591,751 B），全量 664 KB（680,438 B）；
+差额仅为模型代码，three.js 与浏览台骨架始终在包内。
 
 ## 步骤
 
