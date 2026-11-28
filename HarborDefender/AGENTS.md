@@ -118,7 +118,7 @@ cannon                     Group
   两端台阶式削低（只动陆侧墙顶，z < -0.08 的垛体压住区不削）、陆侧墙顶两处啃口、临海面三处平底凿痕。
   6 座垛体各 3 行顶面，顶行按 32 mm 块整块削低 0.02–0.095 m、次行轻微错位。
 - 碎石：6 块大块低模碎石（二十面体 20 tri/块，约 0.14–0.22 m 宽）散在墙顶两端，合并进 `wall-stone`；不做沙包。
-- 节点：`wall` → `wall-stone`（墙身 + 垛体 + 碎石合并）、`wall-puddle`（墙顶 4 处积水合并）；
+- 节点：`wall` → `wall-stone`（墙身 + 垛体 + 碎石合并）、`wall-puddle`（墙顶 3 处积水合并，源码 `puddleSpots` 3 条）；
   无 `gun_rotate` / `muzzle` / `hit_core`。
 - 材质：1 个 `MeshStandardMaterial`（`wall-stone`），颜色贴图 1024 乱石砌墙，粗糙度/金属度与法线为 512，
   `roughnessMap` 与 `metalnessMap` 共用 G=roughness、B=metalness 贴图，基色纯白。
@@ -133,6 +133,8 @@ cannon                     Group
 - 兼容：兄弟项目常量不用改。碎块落水仍按 z < -1.5 判定，最外侧 0.1 m 墙体上的少量碎块会直接落水；
   boss 扫射瞄准 y = 1.05 仍在垛口（1.02）之上。
 - 墙顶必须保持绝对水平：战损只削两端陆侧墙顶与陆侧啃口，三个炮位安装盘半径 0.23 内的墙顶顶点保持 y = +0.25 不变。
+- 交付现状：兄弟项目现行版本（提交 59c001b，v6）已把出口改名 `createHarborWall(skyReflection?)`、把积水换成 unlit 天空镜面，
+  本节描述的是本仓库这一版；两侧差异明细见「交付与注入（实测）」第 2 节。
 
 ## 海盗轰炸机（bombardier）
 
@@ -439,6 +441,62 @@ pirate-chief              Group     根，局部 (0, 0, 0)
 - `hit_core` 固定 (0, 0.215, 0)，不随包围盒变化；`hp_blood` 在帽顶 (0, 0.45, 0)。
 - 无 `lift`、无枢轴子节点：浏览台 pitch 写在根 `pirate-chief.rotation.x`（−15…15°），yaw 写在根 `rotation.y`。
 - 单件为独立头颅，不含躯干；挂载时以坐垫平面（y≈0）作为承接面。
+
+## 交付与注入（实测）
+
+取数方式（2026-11-28）：对本仓库 7 个 `model.ts` 与兄弟项目
+`C:\Users\bruce\Documents\WebProjects\HarborDefender\src\scene-assets\*.scene-asset.ts` 逐件算 SHA256，
+再用 `git diff --no-index` 做行级比对；挂载事实取自兄弟项目 `src/battle-setup.ts` 的源码行号。
+
+### 1 交付方式
+
+- 交付形态是**拷贝**，不是路径引用：本仓库 `<资产>/src/<name>-model.ts` 覆盖到兄弟项目
+  `src/scene-assets/<映射名>.scene-asset.ts`。兄弟项目所有 import 都指向自身 `./scene-assets/*.js`，
+  没有跨仓库相对路径，也没有 symlink。
+- 文件名映射（本仓库 → 兄弟项目）：cannon → `cannon.scene-asset.ts`；wall → `harbor-wall.scene-asset.ts`；
+  boss_islewrath → `boss-islewrath.scene-asset.ts`；pirate_chief → `pirate-chief.scene-asset.ts`；
+  bombardier / ornithopter / pirate-ship 同名加 `.scene-asset` 后缀。
+- 导入写法带 `.js` 后缀（`battle-setup.ts`:54-65），符合兄弟项目的 ESM 约定。
+- 交付包含一次兄弟项目侧的提交：7 件资产在兄弟项目仓库各有自己的提交（见下表末列），不是一次性批量提交。
+- 交付后本仓库再改模型不会自动同步；重交付 = 重新覆盖 + 兄弟项目侧提交，字节数与下表会再次变化。
+
+### 2 逐件核对（本仓库 vs 兄弟项目，2026-11-28）
+
+| 资产 | 本仓库字节 | 兄弟项目字节 | 行级差异 | 结论 | 兄弟项目落库提交 |
+| --- | --- | --- | --- | --- | --- |
+| cannon | 22797 | 22797 | 0 | SHA256 完全相同 | c737602 2026-11-19 |
+| pirate-ship | 38106 | 38106 | 0 | SHA256 完全相同 | c737602 2026-11-19 |
+| bombardier | 37519 | 37553 | +4 / −3 | 仅文件头注释 | b2a0969 2026-11-19 |
+| ornithopter | 34403 | 34562 | +3 / −1 | 仅文件头注释 | 3d15107 2026-11-19 |
+| boss_islewrath | 31261 | 31340 | +2 / −1 | 仅文件头注释 | 669423a 2026-11-20 |
+| pirate_chief | 21176 | 21255 | +2 / −1 | 仅文件头注释 | 669423a 2026-11-20 |
+| wall | 19498 | 21679 | +63 / −15 | 实质代码差异 | 59c001b 2026-11-22 |
+
+- 注释类差异的固定内容：兄弟项目侧把「对齐兄弟项目 xxx.glb」「兄弟项目 8 rad/s」「保持兄弟项目 barY = 0.479」
+  这类本仓库口径改写成兄弟项目自身口径（`PROP 8 rad/s`、`健康条 barY 沿用该高度`、`level-wave-system 硬依赖`），
+  并统一加一行「与海盗船、轰炸机一致：loading 阶段在代码中构建，不再固化 GLB」。几何与材质代码零差异。
+- wall 的差异是实质代码，方向是**兄弟项目更新**：`createWall()` → `createHarborWall(skyReflection?: THREE.Texture | null)`；
+  积水材质从 `MeshStandardMaterial`（0x1d2426 / roughness 0.05 / opacity 0.9）改为 unlit 天空镜面 `ShaderMaterial`
+  （采样海面同款天空 cubemap、掠射角更接近镜面、垂直俯视更透、手动线性转 sRGB）；积水 `castShadow = false`。
+  该迭代只存在于兄弟项目（提交 59c001b，v6 stone with mirrored sky puddles，版本 0.1.481），本仓库未回流。
+  本文「城防港城墙」一节描述的是本仓库这一版，两侧不同源。
+- 时间关系：兄弟项目 6 件文件 mtime 为 2026/11/20、wall 为 2026/11/23，均不早于本仓库对应资产最后改动日
+  （cannon 11/18、pirate-ship 11/18、bombardier 11/19、ornithopter 11/19、boss 11/20、pirate_chief 11/20、wall 11/22）。
+
+### 3 挂载契约（兄弟项目侧）
+
+- 7 件全部在 `startBattle` 的加载流程里构建：loading 面板先呈现一帧、再停 `LOADING_MIN_MS` 之后统一调用工厂
+  （`battle-setup.ts`:580-593），canvas/three 侧一次构建原型，其余实例均为克隆。
+- 攻击方：原型交给 `LevelWaveSystem.setUnitPrototype('pirate-ship' | 'ornithopter' | 'bombardier' | 'boss_islewrath', proto)`
+  （:615-618），船长走 `setChiefPrototype(chiefProto)`（:619）。
+- 城墙：`bakeWallFaceMottle` 后 `position.set(0, 0.55, WALL_CENTER_Z)`（:622-623）；挂载时统一 `receiveShadow = true`，
+  `castShadow` 除 `wall-puddle` 外全开（:626-632）。
+- 守方加农炮：`decorateCombatPrototype(cannonProto, 0, -0.2)`（:644）只在缺 `muzzle` / `hit_core` 时补建（:141-160）；
+  本仓库 v2 模型已自带这两个节点，该步对现有资产是兜底，三座 clone 自动继承。
+- 命名契约由运行时 `getObjectByName` 强制，改名即断：`gun_rotate`（`cannon-aim-system.ts`:100、
+  `cannon-recoil-system.ts`:43、`level-wave-system.ts`:94）、`muzzle`（`cannon-fire-system.ts`:98、`pirate-fire-system.ts`:89）、
+  `hit_core`（`pirate-fire-system.ts`:99）、`hp_blood`（`boss-chief-system.ts`:149）。
+- 未交付：`char_comma`（TheFarField）无注入目标，本机 `C:\Users\bruce\Documents\WebProjects` 下不存在 TheFarField 项目。
 
 ## 与既有描述的出入
 
