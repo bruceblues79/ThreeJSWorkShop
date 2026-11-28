@@ -24,6 +24,15 @@ pnpm-debug.log*
 # img2threejs local workflow state
 .img2threejs/
 
+# agent workspace (本地记忆，不入库)
+.workbuddy/
+
+# 本地验证截图（临时产物）
+.screenshots/
+
+# 发布应用的本地标记文件
+.wbapp_*.genie
+
 # editor / OS
 .idea/
 .trae/
