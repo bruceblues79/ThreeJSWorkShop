@@ -20,4 +20,23 @@
 - 在该目录下用 `python3` 运行 `forge/` 脚本（Python 3.12.10，`python3.exe` 别名已配置）。
 - 需要时由我（agent）读取该目录的 `SKILL.md`、`grimoire/`、`docs/` 按其流水线执行。
 
+# 资产索引
+
+本表只做状态与导航，规格细节见各子项目 AGENTS.md。
+
+| id | 所属项目 | 代码路径 | 导出函数 | 尺寸(m) | tri | draw call | 文档状态 | 阻塞项 | 最后变动提交 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| cannon | HarborDefender | [cannon-model.ts](HarborDefender/cannon/src/cannon-model.ts) | `createCannon()` | 0.228 × 0.199 × 0.350 | 1780 | 2 | 完整 | 交付流程未入档 | 69fef30 |
+| wall | HarborDefender | [wall-model.ts](HarborDefender/wall/src/wall-model.ts) | `createWall()` | 3.017 × 0.713 × 0.522 | 1546 | 2 | 完整 | 交付流程未入档 | 2e51139 |
+| bombardier | HarborDefender | [bombardier-model.ts](HarborDefender/bombardier/src/bombardier-model.ts) | `createBombardier()` | 1.3800 × 0.5887 × 1.3800 | 1356 | 2 | 完整 | 交付流程未入档 | e77e9d9 |
+| boss-islewrath | HarborDefender | [boss-islewrath-model.ts](HarborDefender/boss_islewrath/src/boss-islewrath-model.ts) | `createBossIslewrath()` | 1.9260 × 2.2913 × 1.9260 | 5828 | 7 | 完整 | 交付流程未入档 | 4d3a77a |
+| ornithopter | HarborDefender | [ornithopter-model.ts](HarborDefender/ornithopter/src/ornithopter-model.ts) | `createOrnithopter()` | 1.4010 × 0.4700 × 0.8422 | 1003 | 2 | 完整 | 交付流程未入档 | 33592df |
+| pirate-ship | HarborDefender | [pirate-ship-model.ts](HarborDefender/pirate-ship/src/pirate-ship-model.ts) | `createPirateShip()` | 0.5403 × 0.9975 × 1.3535 | 1076 | 3 | 完整 | 交付流程未入档 | 698d046 |
+| pirate-chief | HarborDefender | [pirate-chief-model.ts](HarborDefender/pirate_chief/src/pirate-chief-model.ts) | `createPirateChief()` | 0.4100 × 0.4330 × 0.4100 | 1340 | 2 | 完整 | 交付流程未入档 | 2a602aa |
+| char-comma | TheFarField | [char-comma-model.ts](TheFarField/char_comma/src/char-comma-model.ts) | `createCharComma()` | 未实测 | 未实测 | 未实测 | 缺失 | ① `TheFarField/AGENTS.md` 目标项目路径为空，缺尺寸/性能约束；② 交付流程未入档 | 67327ca |
+
+- 「交付流程未入档」为全部资产共性：注入兄弟项目的交付流程从未写入任何文档。
+- 「文档状态」只有完整 / 简略 / 缺失三档；char-comma 因 `TheFarField/AGENTS.md` 仍为空壳而标缺失，尺寸、tri、draw call 均未实测。
+- 「最后变动提交」取 `git log -1 --format='%h %s' -- <该资产的 model.ts 路径>`。
+
 
