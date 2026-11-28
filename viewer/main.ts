@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { ASSETS, type AssetEntry } from './assets';
+import { ASSETS, type AssetEntry } from 'virtual:asset-registry';
 
 /**
  * 项目级公用浏览台。
