@@ -1,18 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
-/**
- * HarborDefender 城防港城墙 v6（低模硬边战损，程序化 PBR）。
- * 契约：原点在墙身中心；墙顶局部 y = +0.25（放置 y = 0.55 后世界 0.8）；
- * 临海面局部 z = -0.30（世界 -1.60），陆地侧 +0.20（世界 -1.10）。单位：米。
- *
- * 墙长 3.0；临海侧垛口式护墙（垛宽 0.22 / 炮位垛口宽 0.48）。战损全部用 9 cm 网格量化，
- * 断口是硬折面而不是连续曲线；墙顶只散落少量大块碎石，不再做沙包。
- * 炮位安装面（x=±0.75/0）及其 0.23 m 半径内保持绝对水平。
- * 石面无苔藓、流痕克制；墙顶 +Y 面另有 4 处独立薄水膜（积水），避开炮位安装盘。
- * 资产只含城墙、碎石与积水，不含炮、基座盘与海面。
- */
-
 const SEED = 20261118;
 
 const DIM = {
@@ -308,24 +296,64 @@ function stoneMaterial(): THREE.MeshStandardMaterial {
   return cache;
 }
 
-let puddleCache: THREE.MeshStandardMaterial | null = null;
-
-/** 积水：深色、极低粗糙度的半透明薄水膜，贴在墙顶 1 mm 处。 */
-function puddleMaterial(): THREE.MeshStandardMaterial {
-  if (puddleCache) return puddleCache;
-  puddleCache = new THREE.MeshStandardMaterial({
+/**
+ * 积水：unlit 天空镜面。反射方向直接采海面同款天空 cubemap，光照不参与，
+ * 也不做水纹运动；输出手动转 sRGB，与天幕、海面走同一条颜色链路。
+ */
+function puddleMaterial(skyCube: THREE.Texture | null): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
     name: 'wall-puddle',
-    color: 0x1d2426,
-    roughness: 0.05,
-    metalness: 0,
+    uniforms: {
+      uSkyCube: { value: skyCube },
+      uOpacity: { value: 0.92 },
+    },
+    vertexShader: /* glsl */ `
+      varying vec3 vWorldPosition;
+      varying vec3 vWorldNormal;
+
+      void main() {
+        vec4 worldPos = modelMatrix * vec4(position, 1.0);
+        vWorldPosition = worldPos.xyz;
+        // mat3(modelMatrix) 保持世界空间法线；renderer 的 normalMatrix 是视图空间。
+        vWorldNormal = normalize(mat3(modelMatrix) * normal);
+        gl_Position = projectionMatrix * viewMatrix * worldPos;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform samplerCube uSkyCube;
+      uniform float uOpacity;
+
+      varying vec3 vWorldPosition;
+      varying vec3 vWorldNormal;
+
+      // ShaderMaterial 绕过渲染器的线性 -> sRGB 输出转换，这里手动编码，
+      // 与天幕 / 海面 shader 完全一致。
+      vec3 linearToSRGB(vec3 c) {
+        c = max(c, vec3(0.0));
+        return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
+      }
+
+      void main() {
+        vec3 toEye = normalize(vWorldPosition - cameraPosition);
+        vec3 reflDir = reflect(toEye, normalize(vWorldNormal));
+        vec3 sky = textureCube(uSkyCube, reflDir).rgb;
+
+        // 薄水膜略压暗、偏冷，避免看起来像石面上的一个洞。
+        vec3 color = sky * vec3(0.9, 0.94, 0.98);
+
+        // 掠射角更接近镜面；近乎垂直俯视时水膜更透，露出下面的石头。
+        float ndv = clamp(dot(normalize(vWorldNormal), -toEye), 0.0, 1.0);
+        float mirror = mix(0.6, 1.0, pow(1.0 - ndv, 2.0));
+
+        gl_FragColor = vec4(linearToSRGB(color), uOpacity * mirror);
+      }
+    `,
     transparent: true,
-    opacity: 0.9,
     depthWrite: false,
     polygonOffset: true,
     polygonOffsetFactor: -1,
     polygonOffsetUnits: -1,
   });
-  return puddleCache;
 }
 
 // ---------------------------------------------------------------- geometry
@@ -451,7 +479,7 @@ function rubbleGeometry(rnd: () => number): THREE.BufferGeometry {
   return geo;
 }
 
-/** 墙顶积水：14 边不规则薄片，紧贴 +Y 面。 */
+/** 墙顶积水：14 边不规则薄片，紧贴 +Y 面；不规则边直接成形，不留软化带。 */
 function puddleGeometry(
   width: number,
   depth: number,
@@ -479,7 +507,12 @@ function puddleGeometry(
 }
 
 // ---------------------------------------------------------------- factory
-export function createWall(): THREE.Group {
+
+/**
+ * `skyReflection` 是海面同款天空 cubemap（battle-setup 在 boot 阶段从程序化
+ * 天空贴图烘出），积水的镜面反射直接采它；不传则积水为纯黑薄膜。
+ */
+export function createHarborWall(skyReflection?: THREE.Texture | null): THREE.Group {
   const material = stoneMaterial();
   const root = new THREE.Group();
   root.name = 'wall';
@@ -543,8 +576,10 @@ export function createWall(): THREE.Group {
     puddleParts.push(puddle);
   });
 
-  const puddleMesh = new THREE.Mesh(mergeAll(puddleParts), puddleMaterial());
+  const puddleMesh = new THREE.Mesh(mergeAll(puddleParts), puddleMaterial(skyReflection ?? null));
   puddleMesh.name = 'wall-puddle';
+  // 这层水膜不投阴影，否则会在石面上压出一圈脏影。
+  puddleMesh.castShadow = false;
   puddleMesh.receiveShadow = true;
   root.add(puddleMesh);
 

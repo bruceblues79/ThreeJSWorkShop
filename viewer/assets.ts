@@ -1,6 +1,6 @@
 import type * as THREE from 'three';
 import { createCannon } from '../HarborDefender/cannon/src/cannon-model';
-import { createWall } from '../HarborDefender/wall/src/wall-model';
+import { createWallWithPreviewSky } from './sky-cube';
 import { createPirateShip } from '../HarborDefender/pirate-ship/src/pirate-ship-model';
 import { createOrnithopter } from '../HarborDefender/ornithopter/src/ornithopter-model';
 import { createBombardier } from '../HarborDefender/bombardier/src/bombardier-model';
@@ -43,7 +43,7 @@ export const ASSETS: AssetEntry[] = [
   {
     id: 'wall',
     label: '城防港城墙 v6',
-    create: createWall,
+    create: createWallWithPreviewSky,
     note: '墙顶 y=0.8 · 炮位 x=±0.75/0 · 3.0 m 垛口护墙 · 墙顶 3 处积水',
   },
   {
