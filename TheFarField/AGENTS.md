@@ -15,8 +15,8 @@
 - 代码：`TheFarField/char_comma/src/char-comma-model.ts`
 - 导出：`createCharComma(): THREE.Group`（文件唯一导出，无参数）
 - 浏览台：资产 id `char-comma`；`pitchNode = char_comma`、pitch 固定 0、yaw ±180°（`viewer/assets.ts`）
-- 尺寸 X × Y × Z：未实测
-- tri：未实测
-- draw call：未实测
+- 尺寸 X × Y × Z：1.803 × 1.802 × 0.485 m
+- tri：25312
+- draw call：14
 - 实测方式：`npm run viewer:build -- char-comma` 后打开 `viewer/preview.html?asset=char-comma`，
   取读数面板与 `window.__assetInfo`；数字回填前一律保持「未实测」。

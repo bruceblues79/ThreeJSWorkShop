@@ -33,7 +33,7 @@
 | ornithopter | HarborDefender | [ornithopter-model.ts](HarborDefender/ornithopter/src/ornithopter-model.ts) | `createOrnithopter()` | 1.4010 × 0.4700 × 0.8422 | 1003 | 2 | 完整 | 交付流程未入档 | 33592df |
 | pirate-ship | HarborDefender | [pirate-ship-model.ts](HarborDefender/pirate-ship/src/pirate-ship-model.ts) | `createPirateShip()` | 0.5403 × 0.9975 × 1.3535 | 1076 | 3 | 完整 | 交付流程未入档 | 698d046 |
 | pirate-chief | HarborDefender | [pirate-chief-model.ts](HarborDefender/pirate_chief/src/pirate-chief-model.ts) | `createPirateChief()` | 0.4100 × 0.4330 × 0.4100 | 1340 | 2 | 完整 | 交付流程未入档 | 2a602aa |
-| char-comma | TheFarField | [char-comma-model.ts](TheFarField/char_comma/src/char-comma-model.ts) | `createCharComma()` | 未实测 | 未实测 | 未实测 | 简略 | ① 探索性质，无约束；待补实测数字；② 交付流程未入档 | 67327ca |
+| char-comma | TheFarField | [char-comma-model.ts](TheFarField/char_comma/src/char-comma-model.ts) | `createCharComma()` | 1.803 × 1.802 × 0.485 | 25312 | 14 | 简略 | 探索性质，无约束；交付流程未入档 | 67327ca |
 
 - 「交付流程未入档」为全部资产共性：注入兄弟项目的交付流程从未写入任何文档。
 - 「文档状态」只有完整 / 简略 / 缺失三档；char-comma 标简略：`TheFarField/AGENTS.md` 已有代码路径、导出与浏览台 id，
