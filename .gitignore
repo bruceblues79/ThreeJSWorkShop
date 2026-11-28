@@ -5,6 +5,7 @@ node_modules/
 dist/
 dist-ssr/
 *.tsbuildinfo
+viewer/preview.html
 
 # bundler cache
 .vite/

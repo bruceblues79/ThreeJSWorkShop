@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+    <title>资产浏览台 · Three.js Workshop</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #2a2722;
+        --muted: #6d665c;
+        --panel: rgba(252, 250, 246, 0.86);
+        --line: rgba(42, 39, 34, 0.12);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+        color: var(--ink);
+        background: radial-gradient(120% 90% at 50% 0%, #f6f4ef 0%, #e6e2d9 55%, #cfc9bd 100%);
+      }
+      #app {
+        position: fixed;
+        inset: 0;
+      }
+      canvas {
+        display: block;
+      }
+      .card {
+        position: fixed;
+        top: 16px;
+        left: 16px;
+        padding: 12px 16px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        backdrop-filter: blur(8px);
+        font-size: 12px;
+        line-height: 1.7;
+        color: var(--muted);
+        pointer-events: none;
+        max-width: min(440px, calc(100vw - 32px));
+      }
+      .card b {
+        display: block;
+        font-size: 13px;
+        color: var(--ink);
+        margin-bottom: 4px;
+        letter-spacing: 0.02em;
+      }
+      .bar {
+        position: fixed;
+        left: 50%;
+        bottom: 18px;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 14px;
+        align-items: center;
+        flex-wrap: wrap;
+        justify-content: center;
+        padding: 10px 16px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        backdrop-filter: blur(8px);
+        font-size: 12px;
+        max-width: calc(100vw - 32px);
+      }
+      .bar label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        white-space: nowrap;
+      }
+      .bar input[type="range"] {
+        width: 130px;
+        accent-color: #7d5a2e;
+      }
+      .bar output {
+        min-width: 42px;
+        font-variant-numeric: tabular-nums;
+        color: var(--ink);
+      }
+      .bar select {
+        font: inherit;
+        padding: 5px 8px;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: #fffdf9;
+        color: var(--ink);
+      }
+      .bar .views {
+        display: flex;
+        gap: 6px;
+      }
+      .bar button {
+        font: inherit;
+        padding: 5px 10px;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: #fffdf9;
+        color: var(--ink);
+        cursor: pointer;
+      }
+      .bar button:hover {
+        border-color: #a9977d;
+      }
+      .bar button.on {
+        background: #7d5a2e;
+        border-color: #7d5a2e;
+        color: #fdf8ef;
+      }
+      @media (max-width: 560px) {
+        .card {
+          font-size: 11px;
+          padding: 10px 12px;
+        }
+        .bar input[type="range"] {
+          width: 96px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script>
+      window.addEventListener('error', (event) => {
+        const panel = document.createElement('pre');
+        panel.style.cssText =
+          'position:fixed;inset:12px;z-index:99;margin:0;padding:12px;background:#fff;color:#a11;font:12px/1.5 monospace;overflow:auto;white-space:pre-wrap';
+        panel.textContent = String(event.message || event.error) + '\n' + String((event.error && event.error.stack) || '');
+        document.body.appendChild(panel);
+      });
+    </script>
+    <div class="card"><b id="title">资产浏览台</b><span id="meta">加载中…</span></div>
+    <div class="bar">
+      <div class="views" id="assets"></div>
+      <label>回转 <input id="yaw" type="range" min="-45" max="45" step="1" value="0" /><output id="yawOut">0°</output></label>
+      <label>俯仰 <input id="pitch" type="range" min="0" max="80" step="1" value="18" /><output id="pitchOut">18°</output></label>
+      <div class="views">
+        <button data-view="iso" class="on">等轴</button>
+        <button data-view="front">正面</button>
+        <button data-view="side">侧面</button>
+      </div>
+    </div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
